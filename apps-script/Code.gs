@@ -1,5 +1,8 @@
 /** TRANG SAT — bound Google Sheets database. Run setupSystem from the sheet editor. */
+const PHOTO_FOLDER_ID = '1TMxlpDlhdhxxilLHaH85qcYmGT-zR3jH';
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const TABLES = {
+  Photos: ['id','reportDate','districtId','districtName','fileId','fileName','mimeType','sizeBytes','caption','driveUrl','uploadedAt'],
   Districts: ['id','english','thai','longitude','latitude'],
   DailyReports: ['id','reportDate','districtId','districtName','status','submitted','rain','waterLevel','trend','reporter','notes','updatedAt'],
   PHEOCReports: ['id','reportDate','group','readiness','personnel','actions','issues','nextPlan','updatedAt'],
@@ -39,10 +42,10 @@ function setupSystem() {
     return {ok:true, spreadsheetId:ss.getId(), tables:Object.keys(TABLES)};
   } finally {lock.releaseLock();}
 }
-function doGet() {return json_({ok:true,service:'TRANG SAT DB',version:'1.0',message:'ใช้ POST พร้อม API token จาก server'});}
+function doGet() {return json_({ok:true,service:'TRANG SAT DB',version:'1.1',message:'ใช้ POST พร้อม API token จาก server'});}
 function doPost(e) {
   try {
-    if (!e || !e.postData || e.postData.contents.length > 100000) throw new Error('INVALID_REQUEST');
+    if (!e || !e.postData || e.postData.contents.length > 3000000) throw new Error('INVALID_REQUEST');
     const input = JSON.parse(e.postData.contents);
     const expected = PropertiesService.getScriptProperties().getProperty('API_TOKEN');
     if (!expected || typeof input.token !== 'string' || !equal_(input.token,expected)) throw new Error('UNAUTHORIZED');
@@ -51,6 +54,8 @@ function doPost(e) {
   } catch(err) {return json_({ok:false,error:String(err.message || err)});}
 }
 function dispatch_(input) {
+  if(input.action === 'uploadPhoto') return uploadPhoto_(input);
+  if(input.action === 'getPhoto') return getPhoto_(input.id);
   if(input.action === 'bootstrap') {
     const date = validDate_(input.reportDate || today_());
     return {
@@ -64,7 +69,7 @@ function dispatch_(input) {
   if(input.action === 'list') {
     return readRows_(name).filter(r=>(!input.reportDate||r.reportDate===validDate_(input.reportDate))&&(!input.districtId||r.districtId===input.districtId));
   }
-  if(input.action === 'upsert' && name !== 'Districts') return upsert_(name,input.record);
+  if(input.action === 'upsert' && name !== 'Districts' && name !== 'Photos') return upsert_(name,input.record);
   throw new Error('UNKNOWN_ACTION');
 }
 function upsert_(name,record) {
@@ -118,3 +123,44 @@ function today_(){return Utilities.formatDate(new Date(),'Asia/Bangkok','yyyy-MM
 function safeCell_(v){if(typeof v==='string'){if(v.length>20000)throw new Error('TEXT_TOO_LONG');return /^[=+@-]/.test(v)?"'"+v:v;}if(typeof v==='number'&&!Number.isFinite(v))throw new Error('INVALID_NUMBER');if(typeof v!=='string'&&typeof v!=='number'&&typeof v!=='boolean')throw new Error('INVALID_CELL');return v;}
 function equal_(a,b){let diff=a.length^b.length;for(let i=0;i<b.length;i++)diff|=(a.charCodeAt(i)||0)^b.charCodeAt(i);return diff===0;}
 function json_(v){return ContentService.createTextOutput(JSON.stringify(v)).setMimeType(ContentService.MimeType.JSON);}
+
+function uploadPhoto_(input) {
+ const date=validDate_(input.reportDate || today_());
+ const district=DISTRICT_SEEDS.find(d=>d[0]===input.districtId);
+ if(!district)throw new Error('INVALID_DISTRICT');
+ if(typeof input.id!=='string'||!/^photo_[A-Za-z0-9_-]{10,100}$/.test(input.id))throw new Error('INVALID_UPLOAD_ID');
+ if(!['image/jpeg','image/png','image/webp'].includes(input.mimeType))throw new Error('INVALID_IMAGE_TYPE');
+ if(typeof input.base64!=='string'||input.base64.length>Math.ceil(MAX_PHOTO_BYTES/3)*4||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.base64))throw new Error('INVALID_IMAGE_DATA');
+ const bytes=Utilities.base64Decode(input.base64);
+ if(bytes.length<12||bytes.length>MAX_PHOTO_BYTES)throw new Error('IMAGE_TOO_LARGE_OR_EMPTY');
+ const u=i=>(bytes[i]+256)%256;
+ const valid=input.mimeType==='image/jpeg'?u(0)===255&&u(1)===216&&u(2)===255:input.mimeType==='image/png'?[137,80,78,71,13,10,26,10].every((n,i)=>u(i)===n):[82,73,70,70].every((n,i)=>u(i)===n)&&[87,69,66,80].every((n,i)=>u(i+8)===n);
+ if(!valid)throw new Error('IMAGE_SIGNATURE_MISMATCH');
+ const caption=String(input.caption||'');if(caption.length>1000)throw new Error('CAPTION_TOO_LONG');
+ const lock=LockService.getScriptLock();lock.waitLock(20000);
+ let file;
+ try {
+  const sh=sheet_('Photos');checkHeaders_(sh,'Photos');
+  const old=readRows_('Photos').find(r=>r.id===input.id);
+  if(old){if(old.districtId!==input.districtId||old.reportDate!==date)throw new Error('UPLOAD_ID_CONFLICT');return old;}
+  const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}[input.mimeType];
+  const name=date+'_'+district[2]+'_'+input.id+'.'+ext;
+  file=DriveApp.getFolderById(PHOTO_FOLDER_ID).createFile(Utilities.newBlob(bytes,input.mimeType,name));
+  // Inherit folder access; do not make uploaded photos public.
+  const row={id:input.id,reportDate:date,districtId:district[0],districtName:district[2],fileId:file.getId(),fileName:name,mimeType:input.mimeType,sizeBytes:bytes.length,caption,driveUrl:file.getUrl(),uploadedAt:new Date().toISOString()};
+  sh.getRange(sh.getLastRow()+1,1,1,TABLES.Photos.length).setValues([TABLES.Photos.map(k=>safeCell_(row[k]))]);
+  SpreadsheetApp.flush();return row;
+ }catch(err){if(file){try{file.setTrashed(true);}catch(ignored){}}throw err;}finally{lock.releaseLock();}
+}
+function getPhoto_(id) {
+ const row=readRows_('Photos').find(r=>r.id===id);if(!row)throw new Error('PHOTO_NOT_FOUND');
+ const file=DriveApp.getFileById(row.fileId);if(file.isTrashed())throw new Error('PHOTO_NOT_FOUND');
+ const parents=file.getParents();let belongs=false;while(parents.hasNext()){if(parents.next().getId()===PHOTO_FOLDER_ID)belongs=true;}
+ if(!belongs)throw new Error('PHOTO_FOLDER_MISMATCH');
+ if(file.getSize()>MAX_PHOTO_BYTES)throw new Error('IMAGE_TOO_LARGE');
+ return {mimeType:row.mimeType,base64:Utilities.base64Encode(file.getBlob().getBytes())};
+}
+function checkPhotoFolder() {
+ const folder=DriveApp.getFolderById(PHOTO_FOLDER_ID);
+ return {id:folder.getId(),name:folder.getName()};
+}

@@ -44,3 +44,16 @@ body: {"action":"upsert","table":"DailyReports","record":{"reportDate":"2026-10-
 ตรวจ syntax และจำลอง API/proxy แล้ว แต่ยังไม่ได้รันบน Apps Script จริง ยังไม่มี repository หรือ deployment ใหม่
 หน้า Gemini เป็นต้นแบบ มีเนื้อหาและปุ่มสาธิต การเชื่อม Sheets รุ่นนี้ผูกโหลดข้อมูลรายงานอำเภอ/PHEOC และบันทึกรายงานอำเภอ ส่วน AI, LINE, SMS, งานตามเวลา และข้อมูลสถานการณ์ส่วนอื่นยังไม่ใช่บริการจริง
 คู่มือ Google: https://developers.google.com/apps-script/guides/web
+
+
+## ภาพสถานการณ์อำเภอ (รุ่น 1.1)
+โฟลเดอร์ปลายทาง: Trang SAT — 1TMxlpDlhdhxxilLHaH85qcYmGT-zR3jH
+แทนที่ Code.gs ด้วย apps-script/Code.gs รุ่นล่าสุด แล้วรัน setupSystem() เพิ่มตาราง Photos โดยไม่ลบตารางเดิม
+รัน checkPhotoFolder() เพื่ออนุญาตสิทธิ Drive และตรวจว่าบัญชีเจ้าของ deployment เข้าถึงโฟลเดอร์ได้ จากนั้น Deploy → Manage deployments → Edit → New version → Deploy โดยใช้ URL เดิมและ API_TOKEN เดิม
+หน้าเว็บ: เข้าสู่ฐานข้อมูล → รายงานประจำวันอำเภอ → เลือกอำเภอ → เลือกภาพ → กรอกคำอธิบาย → อัปโหลดภาพลง Drive
+รองรับ JPG PNG WEBP ขนาดไม่เกิน 2 MB ต่อภาพ ครั้งละไม่เกิน 5 ภาพ อัปโหลดทีละไฟล์เพื่อไม่เกินข้อจำกัด request
+เก็บไฟล์ภาพในโฟลเดอร์ที่ระบุโดยตรง ชื่อไฟล์ประกอบด้วยวันที่ อำเภอ และ upload ID; Photos เก็บ fileId, driveUrl, districtId, reportDate, caption, uploadedAt
+API getPhoto ส่งภาพให้ผู้เข้าสู่ระบบโดยตรวจ fileId จาก Photos และโฟลเดอร์ปลายทาง ห้ามส่ง fileId อิสระเพื่ออ่านไฟล์อื่น
+ไม่เปิดภาพเป็นสาธารณะ ไม่เปลี่ยนสิทธิแชร์ของโฟลเดอร์ ผู้ใช้ปุ่มเปิด Drive ต้องมีสิทธิ Drive ของไฟล์นั้น ส่วนดูภาพในแอปใช้สิทธิผ่าน API
+ยังใช้บัญชีร่วมตามระบบเดิม ไม่มีการจำกัดสิทธิภาพตามอำเภอรายบุคคล
+ถ้ากดอัปโหลดซ้ำหลัง request timeout จะใช้ upload ID เดิม ไม่เพิ่มไฟล์/แถวซ้ำ; หากบันทึก metadata ไม่สำเร็จ ไฟล์ใหม่จะถูกส่งไปถังขยะเพื่อไม่ทิ้งไฟล์ค้าง

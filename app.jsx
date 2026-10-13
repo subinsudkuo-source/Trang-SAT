@@ -78,6 +78,41 @@ function DatabasePanel({onLoaded}) {
  </section>;
 }
 
+
+function DistrictPhotos({districtId,reportDate,showToast}) {
+ const [photos,setPhotos]=useState([]),[busy,setBusy]=useState(false),[caption,setCaption]=useState(''),[message,setMessage]=useState('เข้าสู่ฐานข้อมูลก่อนโหลดหรืออัปโหลดภาพ');
+ const fileInput=useRef(null), uploadIds=useRef(new WeakMap());
+ const load=async()=>{try{const rows=await DB.request({action:'list',table:'Photos',districtId,reportDate});setPhotos(rows);setMessage(rows.length?'ภาพที่บันทึกใน Drive':'ยังไม่มีภาพสำหรับอำเภอและวันที่นี้');}catch(e){setPhotos([]);setMessage(e.message==='UNKNOWN_TABLE'?'ต้องอัปเดต Code.gs และรัน setupSystem() เพื่อเปิดระบบภาพก่อน':e.message);}};
+ useEffect(()=>{setPhotos([]);if(DB.credentials)load();},[districtId,reportDate]);
+ const upload=async()=>{
+ const files=Array.from(fileInput.current.files||[]);if(!files.length){setMessage('กรุณาเลือกภาพ');return;}
+ if(files.length>5){setMessage('อัปโหลดได้ครั้งละไม่เกิน 5 ภาพ');return;}
+ setBusy(true);
+ try{for(const file of files){
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>2*1024*1024||!file.size)throw new Error('รองรับ JPG / PNG / WEBP ขนาดไม่เกิน 2 MB ต่อภาพ');
+ if(!uploadIds.current.has(file))uploadIds.current.set(file,'photo_'+crypto.randomUUID());
+ const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('อ่านไฟล์ไม่สำเร็จ'));reader.readAsDataURL(file);});
+ await DB.request({action:'uploadPhoto',id:uploadIds.current.get(file),districtId,reportDate,mimeType:file.type,base64,caption});
+ }
+ fileInput.current.value='';setCaption('');await load();showToast('บันทึกภาพในโฟลเดอร์ Drive และข้อมูลอ้างอิงในชีตแล้ว');
+ }catch(e){setMessage('อัปโหลดไม่สำเร็จ: '+e.message);}finally{setBusy(false);}
+ };
+ return <section className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+ <h4 className="font-bold">ภาพสถานการณ์อำเภอ • {reportDate}</h4>
+ <p className="text-sm">ภาพเก็บในโฟลเดอร์ Drive “Trang SAT” รองรับ JPG / PNG / WEBP ไม่เกิน 2 MB ต่อภาพ ครั้งละ 5 ภาพ</p>
+ <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy} aria-label="เลือกภาพสถานการณ์อำเภอ" className="block w-full"/>
+ <input value={caption} onChange={e=>setCaption(e.target.value)} maxLength={1000} placeholder="คำอธิบายภาพ / สถานที่" aria-label="คำอธิบายภาพ" className="border rounded p-2 w-full"/>
+ <div className="flex gap-2"><button type="button" disabled={busy} onClick={upload} className="bg-blue-700 text-white px-4 py-2 rounded">{busy?'กำลังอัปโหลด…':'อัปโหลดภาพลง Drive'}</button><button type="button" disabled={busy} onClick={load} className="border px-4 py-2 rounded bg-white">โหลดภาพ</button></div>
+ <p role="status" className="text-sm">{message}</p>
+ <div className="grid sm:grid-cols-2 gap-3">{photos.map(photo=><PhotoCard key={photo.id} photo={photo}/>)}</div>
+ </section>;
+}
+function PhotoCard({photo}) {
+ const [image,setImage]=useState(''),[message,setMessage]=useState('');
+ const preview=async()=>{setMessage('กำลังโหลด…');try{const data=await DB.request({action:'getPhoto',id:photo.id});setImage('data:'+data.mimeType+';base64,'+data.base64);setMessage('');}catch(e){setMessage(e.message);}};
+ return <article className="rounded border bg-white p-3 space-y-2">{image?<img src={image} alt={photo.caption||'ภาพสถานการณ์อำเภอ'} className="w-full h-48 object-contain rounded"/>:<button type="button" onClick={preview} className="text-blue-700 underline">ดูภาพในแอป</button>}<p className="text-sm">{photo.caption||photo.fileName}</p><p className="text-xs text-gray-500">{photo.districtName} • {photo.reportDate}</p><a href={photo.driveUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline text-sm">เปิดภาพใน Drive</a><p role="status">{message}</p></article>;
+}
+
 function App() {
             const [currentRole, setCurrentRole] = useState('PROV_SAT');
             const [activeTab, setActiveTab] = useState('summary');
@@ -920,6 +955,7 @@ function App() {
                             ></textarea>
                         </div>
 
+                        <DistrictPhotos key={selectedDistId} districtId={selectedDistId} reportDate={formData.reportDate || new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"})} showToast={showToast} />
                         <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
                             <button
                                 onClick={() => handleSave(false)}
