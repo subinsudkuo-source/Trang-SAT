@@ -61,7 +61,10 @@ const DB = {
    const response = await fetch('/api/db', {method:'POST', credentials:'same-origin', headers,body:JSON.stringify(input)});
    const result = await response.json();
    if(!result.ok){const error=new Error(result.error || 'บันทึกไม่สำเร็จ');error.status=response.status;throw error;}
-   return result.data;
+   const data=result.data;
+   if(Array.isArray(data))return data.map(unpackFloodReport);
+   if(data&&Array.isArray(data.reports))return {...data,reports:data.reports.map(unpackFloodReport)};
+   return unpackFloodReport(data);
  }
 };
 function DatabasePanel({onLoaded}) {
@@ -858,152 +861,77 @@ function App() {
             );
         }
 
-        function DistrictReportView({ districts, reports, setReports, showToast }) {
-            const [selectedDistId, setSelectedDistId] = useState('d01');
-            const currentDist = districts.find(d => d.id === selectedDistId);
-            const currentReport = reports.find(r => r.districtId === selectedDistId) || {
-                districtId: selectedDistId,
-                districtName: currentDist.thai,
-                status: currentDist.status,
-                submitted: false,
-                rain: currentDist.rain,
-                waterLevel: currentDist.water,
-                trend: currentDist.trend,
-                notes: ''
-            };
-
-            const [formData, setFormData] = useState(currentReport);
-
-            useEffect(() => {
-                const rep = reports.find(r => r.districtId === selectedDistId);
-                const dist = districts.find(d => d.id === selectedDistId);
-                setFormData(rep || {
-                    districtId: selectedDistId,
-                    districtName: dist.thai,
-                    status: dist.status,
-                    submitted: false,
-                    rain: dist.rain,
-                    waterLevel: dist.water,
-                    trend: dist.trend,
-                    notes: ''
-                });
-            }, [selectedDistId, reports, districts]);
-
-            const handleSave = async (isSubmit = false) => {
- try {
- const reportDate=formData.reportDate || new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Bangkok'});
- const record={districtId:formData.districtId,districtName:formData.districtName,reportDate,status:formData.status,submitted:isSubmit,rain:Number(formData.rain),waterLevel:formData.waterLevel||'',trend:formData.trend||'',reporter:formData.reporter||'',notes:formData.notes||''};
- const updated=await DB.request({action:'upsert',table:'DailyReports',record});
- setReports(previous=>previous.some(r=>r.districtId===selectedDistId)?previous.map(r=>r.districtId===selectedDistId?updated:r):[...previous,updated]);
- showToast(isSubmit?'ส่งรายงานเข้า Google Sheets แล้ว':'บันทึกร่างใน Google Sheets แล้ว');
- }catch(e){showToast('บันทึกไม่สำเร็จ: '+e.message);}
+const FLOOD_REPORT_PREFIX = 'TRANG_SAT_FLOOD_V1:';
+function unpackFloodReport(record) {
+ if(!record || typeof record.notes!=='string' || !record.notes.startsWith(FLOOD_REPORT_PREFIX))return record;
+ try{const payload=JSON.parse(record.notes.slice(FLOOD_REPORT_PREFIX.length));return {...record,notes:payload.summary||'',floodReport:payload};}catch{return record;}
+}
+const floodColumn=(key,label,type='text')=>({key,label,type});
+const FLOOD_TABLES={
+ areas:[floodColumn('tambon','ตำบล'),floodColumn('villages','หมู่บ้าน','number'),floodColumn('households','ครัวเรือน','number'),floodColumn('people','ประชาชนที่ได้รับผลกระทบ (คน)','number'),floodColumn('notes','หมายเหตุ')],
+ staff:[floodColumn('type','การเสียชีวิต / บาดเจ็บ'),floodColumn('count','รวม (ราย)','number'),floodColumn('detail','รายละเอียด'),floodColumn('families','ครอบครัวได้รับผลกระทบ','number'),floodColumn('homes','บ้านได้รับผลกระทบ (หลัง)','number')],
+ population:[floodColumn('type','การเสียชีวิต / บาดเจ็บ'),floodColumn('count','รวม (ราย)','number'),floodColumn('detail','รายละเอียด'),floodColumn('ems','การส่งผู้ป่วยผ่านระบบ EMS')],
+ partial:[floodColumn('facility','สถานบริการ'),floodColumn('damage','ประมาณการความเสียหาย (บาท)','number'),floodColumn('detail','รายละเอียด')],
+ closed:[floodColumn('facility','สถานบริการ'),floodColumn('damage','ประมาณการความเสียหาย (บาท)','number'),floodColumn('detail','รายละเอียด')],
+ recovery:[floodColumn('facility','สถานบริการ'),floodColumn('detail','รายละเอียดการดำเนินการ'),floodColumn('budget','ประมาณการงบประมาณความเสียหาย (บาท)','number')],
+ mobile:[floodColumn('unit','หน่วยแพทย์'),floodColumn('units','จำนวนหน่วยแพทย์','number'),floodColumn('visits','ครั้งที่ให้บริการ','number'),floodColumn('patients','ผู้รับบริการ (ราย)','number'),floodColumn('education','บริการสุขศึกษา (ราย)','number')],
+ diseases:[floodColumn('communicable','โรคระบาด (ติดต่อ)'),floodColumn('noncommunicable','โรคไม่ติดต่อ'),floodColumn('specific','ผู้ป่วยเฉพาะ'),floodColumn('other','อื่น ๆ')],
+ sanitation:[floodColumn('activity','กิจกรรมที่ดำเนินการ'),floodColumn('date','วันเดือนปี','date'),floodColumn('place','สถานที่ปฏิบัติงาน'),floodColumn('people','ผู้รับบริการ (ราย)','number')],
+ medicine:[floodColumn('date','วัน / เดือน / ปี','date'),floodColumn('quantity','จำนวนชุด','number')],
+ shelters:[floodColumn('activity','กิจกรรมที่ดำเนินการ'),floodColumn('date','วันเดือนปี','date'),floodColumn('place','สถานที่ปฏิบัติงาน'),floodColumn('people','ผู้รับบริการ (ราย)','number')],
+ mentalAid:[floodColumn('activity','กิจกรรมที่ดำเนินการ'),floodColumn('date','วันเดือนปี','date'),floodColumn('place','สถานที่ปฏิบัติงาน'),floodColumn('people','ผู้รับบริการ (ราย)','number')],
+ support:[floodColumn('item','รายการ'),floodColumn('quantity','จำนวน','number'),floodColumn('unit','หน่วย'),floodColumn('notes','หมายเหตุ')]
+};
+const blankFloodReport=date=>({version:1,summary:'',asOfDate:date,asOfTime:'',areaDate:date,facilityDate:date,aidStart:'',aidEnd:date,medicineStart:'',medicineEnd:date,supportDate:date,signatureDate:date,position:'',populationDetail:'',normalHospitals:'',normalPcu:'',partialHospitals:'',partialPcu:'',closedCount:'',recoveryCount:'',assessed:'',highStress:'',depression:'',suicideRisk:'',ptsd:'',specialCare:'',areas:[{}],staff:[{type:'เสียชีวิต'},{type:'ได้รับบาดเจ็บ'}],population:[{type:'เสียชีวิต'},{type:'ได้รับบาดเจ็บ'}],partial:[{}],closed:[{}],recovery:[{}],mobile:[{}],diseases:[{}],sanitation:[{}],medicine:[{}],shelters:[{}],mentalAid:[{}],support:[{}]});
+function FloodTable({name,title,value,onChange,disabled}) {
+ const columns=FLOOD_TABLES[name],rows=value||[];
+ const fixed=name==='staff'||name==='population';
+ const update=(index,key,v)=>onChange(rows.map((row,i)=>i===index?{...row,[key]:v}:row));
+ const sums=columns.filter(c=>c.type==='number');
+ return <div className="space-y-3"><h4 className="font-bold text-lg">{title}</h4><div className="overflow-x-auto rounded-xl border border-slate-300"><table className="w-full text-base"><thead className="bg-blue-50"><tr><th className="p-3">ที่</th>{columns.map(c=><th className="p-3 min-w-[160px] text-left" key={c.key}>{c.label}</th>)}{!fixed&&<th className="p-3">จัดการ</th>}</tr></thead><tbody>{rows.map((row,index)=><tr key={index} className="border-t border-slate-200"><td className="p-3">{index+1}</td>{columns.map(c=><td className="p-2" key={c.key}>{fixed&&c.key==='type'?row.type:<input aria-label={`${title} แถว ${index+1} ${c.label}`} type={c.type} min={c.type==='number'?0:undefined} step={c.type==='number'?(c.key==='damage'||c.key==='budget'?'0.01':'1'):undefined} value={row[c.key]??''} disabled={disabled} onChange={e=>update(index,c.key,e.target.value)} className="w-full min-w-[140px] p-3 border rounded-lg bg-white text-base"/>}</td>)}{!fixed&&<td className="p-2"><button type="button" disabled={disabled} onClick={()=>onChange(rows.filter((_,i)=>i!==index))} className="text-red-700 px-3 py-2" aria-label={`${title} ลบแถว ${index+1}`}>ลบ</button></td>}</tr>)}</tbody>{sums.length>0&&<tfoot className="bg-slate-50"><tr><th className="p-3">รวม</th>{columns.map(c=><td className="p-3 font-bold" key={c.key}>{c.type==='number'?(rows.some(r=>r[c.key]!==''&&r[c.key]!=null)?rows.reduce((sum,r)=>sum+Number(r[c.key]||0),0).toLocaleString('th-TH'):'—'):''}</td>)}{!fixed&&<td/>}</tr></tfoot>}</table></div>{!fixed&&<button type="button" disabled={disabled} onClick={()=>onChange([...rows,{}])} className="px-4 py-2 border border-blue-300 text-blue-800 rounded-lg">+ เพิ่มแถว</button>}</div>;
+}
+function DistrictReportView({districts,reports,setReports,showToast}) {
+ const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Bangkok'});
+ const [selectedDistId,setSelectedDistId]=useState('d01'),[reportDate,setReportDate]=useState(today);
+ const [form,setForm]=useState(()=>blankFloodReport(today()));
+ const [base,setBase]=useState({status:'ปกติ',rain:'',waterLevel:'',trend:'',reporter:'',submitted:false});
+ const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[loaded,setLoaded]=useState(false),[error,setError]=useState(''),[reload,setReload]=useState(0);
+ const district=districts.find(d=>d.id===selectedDistId);
+ useEffect(()=>{
+  let active=true;setLoading(true);setLoaded(false);setError('');setForm(blankFloodReport(reportDate));setBase({status:'ปกติ',rain:'',waterLevel:'',trend:'',reporter:'',submitted:false});
+  DB.request({action:'list',table:'DailyReports',reportDate,districtId:selectedDistId}).then(rows=>{if(!active)return;const row=unpackFloodReport(rows[0]);if(row){setBase({...row,rain:row.rain??''});setForm({...blankFloodReport(reportDate),...(row.floodReport||{}),summary:row.notes||''});}setLoaded(true);}).catch(e=>{if(active)setError('โหลดรายงานไม่สำเร็จ: '+e.message);}).finally(()=>{if(active)setLoading(false);});
+  return ()=>{active=false;};
+ },[selectedDistId,reportDate,reload]);
+ const change=(key,value)=>setForm(previous=>({...previous,[key]:value}));
+ const input=(key,label,type='text')=><label className="block text-base space-y-1" key={key}><span>{label}</span><input type={type} min={type==='number'?0:undefined} step={type==='number'?'1':undefined} value={form[key]??''} onChange={e=>change(key,e.target.value)} disabled={busy||loading} className="w-full border border-slate-300 rounded-lg p-3 bg-white text-lg"/></label>;
+ const table=(name,title)=><FloodTable name={name} title={title} value={form[name]} onChange={rows=>change(name,rows)} disabled={busy||loading}/>;
+ const save=async submitted=>{
+  if(busy||loading||!loaded)return;
+  setError('');
+  try{
+   if(submitted&&(!form.summary.trim()||!base.reporter.trim()||!form.asOfTime||!form.position.trim()))throw new Error('กรุณากรอกสรุปสถานการณ์ เวลา ชื่อผู้รายงาน และตำแหน่งก่อนส่ง');
+   for(const [name,columns] of Object.entries(FLOOD_TABLES))for(const row of form[name]||[])for(const c of columns.filter(c=>c.type==='number')){const value=row[c.key];if(value!==''&&value!=null&&(!Number.isFinite(Number(value))||Number(value)<0||(!['budget','damage'].includes(c.key)&&!Number.isInteger(Number(value)))))throw new Error('จำนวนต้องเป็นเลขไม่ติดลบ และจำนวนคน/หน่วยต้องเป็นจำนวนเต็ม');}
+   for(const key of ['normalHospitals','normalPcu','partialHospitals','partialPcu','closedCount','recoveryCount','assessed','highStress','depression','suicideRisk','ptsd','specialCare']){const value=form[key];if(value!==''&&value!=null&&(!Number.isInteger(Number(value))||Number(value)<0))throw new Error('จำนวนต้องเป็นจำนวนเต็มที่ไม่ติดลบ');}
+   for(const [start,end] of [['aidStart','aidEnd'],['medicineStart','medicineEnd']])if(form[start]&&form[end]&&form[start]>form[end])throw new Error('วันเริ่มต้นยอดสะสมต้องไม่อยู่หลังวันสิ้นสุด');
+   const notes=FLOOD_REPORT_PREFIX+JSON.stringify({...form,asOfDate:reportDate});
+   if(notes.length>20000)throw new Error('รายละเอียดเกินความจุ 20,000 ตัวอักษร กรุณาย่อข้อความก่อนบันทึก');
+   setBusy(true);
+   const updated=unpackFloodReport(await DB.request({action:'upsert',table:'DailyReports',record:{districtId:selectedDistId,districtName:district.thai,reportDate,status:base.status,submitted,rain:Number(base.rain||0),waterLevel:base.waterLevel||'',trend:base.trend||'',reporter:base.reporter||'',notes}}));
+   if(!updated.floodReport||JSON.stringify(updated.floodReport)!==JSON.stringify({...form,asOfDate:reportDate}))throw new Error('ข้อมูลตอบกลับไม่ครบ กรุณาโหลดตรวจสอบก่อนส่งซ้ำ');
+   setBase(updated);setReports(previous=>[...previous.filter(r=>!(r.districtId===selectedDistId&&r.reportDate===reportDate)),updated]);
+   showToast(submitted?'ส่งรายงานครบตามแบบฟอร์มลง Google Sheets แล้ว':'บันทึกร่างครบทุกหัวข้อลง Google Sheets แล้ว');
+  }catch(e){setError(e.message);showToast('บันทึกไม่สำเร็จ: '+e.message);}finally{setBusy(false);}
  };
-
-            return (
-                <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                                <i className="ph ph-clipboard-text text-bluePrimary"></i>
-                                <span>แบบรายงานประจำวันอุทกภัยระดับอำเภอ (ตามแบบฟอร์ม สสจ.ตรัง)</span>
-                            </h3>
-                            <p className="text-xs text-slate-500">กรอกข้อมูลสถานการณ์น้ำ ฝน พื้นที่เสี่ยง และหน่วยบริการประจำรอบเวลา</p>
-                        </div>
-                        <div className="flex items-center gap-2 w-full md:w-auto">
-                            <label className="text-xs font-medium text-slate-600">เลือกอำเภอ:</label>
-                            <select 
-                                value={selectedDistId} 
-                                onChange={(e) => setSelectedDistId(e.target.value)}
-                                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bluePrimary"
-                            >
-                                {districts.map(d => (
-                                    <option key={d.id} value={d.id}>อำเภอ{d.thai}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="glass-card p-6 space-y-6">
-                        <div className="flex justify-between items-center border-b border-slate-200 pb-4">
-                            <div>
-                                <h4 className="font-bold text-slate-800 text-base">รายงานสถานการณ์ อ. {currentDist.thai}</h4>
-                                <p className="text-xs text-slate-500">สถานะรายงานปัจจุบัน: <span className={formData.submitted ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>{formData.submitted ? 'ส่งแล้ว (Submitted)' : 'ยังไม่ส่ง (Draft)'}</span></p>
-                            </div>
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                formData.status === 'เสี่ยงสูง' ? 'bg-red-100 text-red-700' :
-                                formData.status === 'เฝ้าระวัง' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                            }`}>
-                                ระดับความเสี่ยง: {formData.status}
-                            </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">สถานะความเสี่ยงอำเภอ</label>
-                                <select 
-                                    value={formData.status}
-                                    onChange={(e) => setFormData({...formData, status: e.target.value})}
-                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bluePrimary"
-                                >
-                                    <option value="ปกติ">ปกติ (Normal)</option>
-                                    <option value="เฝ้าระวัง">เฝ้าระวัง (Warning)</option>
-                                    <option value="เสี่ยงสูง">เสี่ยงสูง / วิกฤต (High Risk)</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">ปริมาณฝนสะสม (มม.)</label>
-                                <input 
-                                    type="number" 
-                                    value={formData.rain}
-                                    onChange={(e) => setFormData({...formData, rain: parseFloat(e.target.value) || 0})}
-                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bluePrimary"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-slate-700 mb-1">ระดับน้ำและแนวโน้ม</label>
-                                <input 
-                                    type="text" 
-                                    value={formData.waterLevel}
-                                    onChange={(e) => setFormData({...formData, waterLevel: e.target.value})}
-                                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bluePrimary"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">หมายเหตุ / สรุปสถานการณ์ในพื้นที่ / ความต้องการสนับสนุนด่วน</label>
-                            <textarea 
-                                rows="4"
-                                value={formData.notes}
-                                onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                                placeholder="ระบุรายละเอียดผลกระทบ หน่วยบริการที่เสี่ยง หรือสิ่งที่ต้องการให้จังหวัดสนับสนุน..."
-                                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-bluePrimary"
-                            ></textarea>
-                        </div>
-
-                        <DistrictPhotos key={selectedDistId} districtId={selectedDistId} reportDate={formData.reportDate || new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"})} showToast={showToast} />
-                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
-                            <button
-                                onClick={() => handleSave(false)}
-                                className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2"
-                            >
-                                <i className="ph ph-floppy-disk"></i>
-                                <span>บันทึกร่าง (Draft)</span>
-                            </button>
-                            <button
-                                onClick={() => handleSave(true)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-lg shadow-emerald-600/20"
-                            >
-                                <i className="ph ph-paper-plane-tilt"></i>
-                                <span>ยืนยันและส่งรายงานจังหวัด</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+ return <div className="space-y-6 text-lg"><section className="bg-white p-6 rounded-2xl border space-y-4"><h3 className="font-bold text-2xl">แบบรายงานสถานการณ์น้ำท่วม ระดับอำเภอ จังหวัดตรัง</h3><p>ครบตามแบบรายงาน ปี 2570 • ช่องว่างหมายถึงยังไม่มีข้อมูล กรอก 0 เมื่อยืนยันว่าไม่มี</p><div className="grid md:grid-cols-3 gap-4"><label>อำเภอ<select disabled={busy} value={selectedDistId} onChange={e=>{if(window.confirm('เปลี่ยนอำเภอ? ข้อมูลที่ยังไม่บันทึกจะไม่ถูกเก็บ'))setSelectedDistId(e.target.value);}} className="w-full p-3 border rounded-lg">{districts.map(d=><option key={d.id} value={d.id}>{d.thai}</option>)}</select></label><label>ข้อมูล ณ วันที่<input disabled={busy} type="date" value={reportDate} onChange={e=>{if(e.target.value&&window.confirm('เปลี่ยนวันที่? ข้อมูลที่ยังไม่บันทึกจะไม่ถูกเก็บ'))setReportDate(e.target.value);}} className="w-full p-3 border rounded-lg"/></label>{input('asOfTime','เวลา (ประเทศไทย)','time')}</div><p>สถานะ: {base.submitted?'ส่งรายงานแล้ว':'ร่าง / ยังไม่ส่ง'}</p><button disabled={busy||loading} onClick={()=>setReload(n=>n+1)} className="border rounded-lg px-4 py-2">โหลดรายงานที่บันทึกใหม่</button>{loading&&<p role="status">กำลังโหลดรายงานจาก Google Sheets…</p>}{error&&<p role="alert" className="bg-red-50 text-red-800 rounded-lg p-4">{error}</p>}</section>
+ <section className="bg-white p-6 rounded-2xl border space-y-5"><h3 className="text-xl font-bold">1. สรุปสถานการณ์ทั่วไป</h3><label className="block">สรุปสถานการณ์<textarea value={form.summary} disabled={busy||loading} onChange={e=>change('summary',e.target.value)} rows={4} className="w-full border rounded-lg p-3 text-lg"/></label>{input('areaDate','1.1 ข้อมูลพื้นที่และประชาชน ณ วันที่','date')}{table('areas','1.1 พื้นที่และประชาชนที่ได้รับความเสียหาย')}</section>
+ <section className="bg-white p-6 rounded-2xl border space-y-5">{table('staff','2. บุคลากรสาธารณสุขที่ได้รับผลกระทบ (ยอดสะสม)')}</section>
+ <section className="bg-white p-6 rounded-2xl border space-y-5">{table('population','3. ประชากรที่ได้รับผลกระทบ (ยอดสะสม)')}<label className="block">รายละเอียดเพิ่มเติม<textarea rows={3} disabled={busy||loading} value={form.populationDetail} onChange={e=>change('populationDetail',e.target.value)} className="w-full border rounded-lg p-3"/></label></section>
+ <section className="bg-white p-6 rounded-2xl border space-y-5"><h3 className="text-xl font-bold">4. สถานบริการที่ได้รับความเสียหาย</h3>{input('facilityDate','ข้อมูล ณ วันที่','date')}<div className="grid md:grid-cols-2 gap-4">{input('normalHospitals','4.1 โรงพยาบาลเปิดบริการปกติ (แห่ง)','number')}{input('normalPcu','4.1 รพ.สต. เปิดบริการปกติ (แห่ง)','number')}{input('partialHospitals','4.2 โรงพยาบาลเปิดบริการบางส่วน (แห่ง)','number')}{input('partialPcu','4.2 รพ.สต. เปิดบริการบางส่วน (แห่ง)','number')}</div>{table('partial','4.2 รายละเอียดสถานบริการที่เปิดได้บางส่วน')}{input('closedCount','4.3 ปิดให้บริการ (แห่ง)','number')}{table('closed','4.3 รายละเอียดสถานบริการที่ปิดให้บริการ')}{input('recoveryCount','4.4 สถานบริการที่ฟื้นฟู (แห่ง)','number')}{table('recovery','4.4 การฟื้นฟูสถานบริการที่ได้รับผลกระทบ')}</section>
+ <section className="bg-white p-6 rounded-2xl border space-y-6"><h3 className="text-xl font-bold">5. การช่วยเหลือประชาชนด้านการสาธารณสุข</h3><div className="grid md:grid-cols-2 gap-4">{input('aidStart','ยอดสะสมตั้งแต่วันที่','date')}{input('aidEnd','ถึงวันที่','date')}</div><h4 className="font-bold">5.1 การให้บริการรักษาพยาบาล</h4>{table('mobile','5.1.1 หน่วยแพทย์เคลื่อนที่ / หน่วยเคลื่อนที่')}{table('diseases','5.1.2 โรคที่พบบ่อยจากการออกหน่วยเคลื่อนที่')}<h4 className="text-lg font-bold">5.1.3 ปัญหาสุขภาพจิต</h4><div className="grid md:grid-cols-3 gap-4">{input('assessed','ประเมินปัญหาสุขภาพจิต (ราย)','number')}{input('highStress','เครียดสูง (ราย)','number')}{input('depression','ซึมเศร้า (ราย)','number')}{input('suicideRisk','เสี่ยงต่อการฆ่าตัวตาย (ราย)','number')}{input('ptsd','PTSD (ราย)','number')}{input('specialCare','ต้องติดตามดูแลพิเศษ (ราย)','number')}</div>{table('sanitation','5.1.4 การสุขาภิบาล / ป้องกันโรค')}<div className="grid md:grid-cols-2 gap-4">{input('medicineStart','แจกยาสะสมตั้งแต่วันที่','date')}{input('medicineEnd','ถึงวันที่','date')}</div>{table('medicine','5.1.5 การแจกยาชุดช่วยเหลือผู้ประสบอุทกภัย')}{table('shelters','5.2 การช่วยเหลือศูนย์พักพิง / ศูนย์อพยพ')}{table('mentalAid','5.3 การช่วยเหลือเยียวยาด้านจิตใจ')}</section>
+ <section className="bg-white p-6 rounded-2xl border space-y-5">{input('supportDate','6. ข้อมูลความต้องการสนับสนุน ณ วันที่','date')}{table('support','6. ความต้องการสนับสนุนยาและเวชภัณฑ์ และอื่น ๆ')}</section>
+ <section className="bg-white p-6 rounded-2xl border space-y-4"><h3 className="font-bold text-xl">ผู้รายงาน</h3><div className="grid md:grid-cols-3 gap-4"><label>ลงชื่อผู้รายงาน<input disabled={busy||loading} value={base.reporter||''} onChange={e=>setBase({...base,reporter:e.target.value})} className="w-full p-3 border rounded-lg"/></label>{input('position','ตำแหน่ง')}{input('signatureDate','วันที่รายงาน','date')}</div><p className="text-base text-slate-600">ชื่อผู้รายงานเป็นข้อมูลประกอบรายงาน ไม่ใช่ลายมือชื่อดิจิทัล</p><details><summary className="cursor-pointer">ข้อมูลติดตามเพิ่มเติมของระบบ</summary><div className="grid md:grid-cols-3 gap-4 pt-4"><label>ระดับความเสี่ยง<select value={base.status} onChange={e=>setBase({...base,status:e.target.value})} className="w-full p-3 border rounded-lg"><option>ปกติ</option><option>เฝ้าระวัง</option><option>เสี่ยงสูง</option></select></label><label>ปริมาณฝน (มม.)<input type="number" min="0" step="0.1" value={base.rain??''} onChange={e=>setBase({...base,rain:e.target.value})} className="w-full p-3 border rounded-lg"/></label><label>ระดับน้ำ<input value={base.waterLevel||''} onChange={e=>setBase({...base,waterLevel:e.target.value})} className="w-full p-3 border rounded-lg"/></label><label>แนวโน้ม<input value={base.trend||''} onChange={e=>setBase({...base,trend:e.target.value})} className="w-full p-3 border rounded-lg"/></label></div></details><DistrictPhotos key={selectedDistId+reportDate} districtId={selectedDistId} reportDate={reportDate} showToast={showToast}/><div className="flex flex-wrap gap-3"><button disabled={busy||loading} onClick={()=>save(false)} className="border rounded-xl px-6 py-3 bg-white disabled:opacity-50">{busy?'กำลังบันทึก…':'บันทึกร่าง'}</button><button disabled={busy||loading} onClick={()=>save(true)} className="rounded-xl px-6 py-3 bg-blue-700 text-white disabled:opacity-50">ส่งรายงานเข้า Google Sheets</button></div></section>
+ </div>;
+}
 
         function PheocView({ reports, setReports, showToast }) {
             return (
