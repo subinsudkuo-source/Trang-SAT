@@ -506,8 +506,16 @@ function App() {
                     setMapStatus('กำลังโหลดขอบเขตจริง 10 อำเภอจาก geoBoundaries…');
                     try {
                         const metadata = await getJSON(API);
-                        const downloadURL = metadata.simplifiedGeometryGeoJSON || metadata.gjDownloadURL;
+                        let downloadURL = metadata.simplifiedGeometryGeoJSON || metadata.gjDownloadURL;
                         if (!downloadURL) throw new Error('ไม่พบลิงก์ดาวน์โหลด GeoJSON');
+                        // GitHub /raw redirects omit CORS headers; media serves the LFS GeoJSON with CORS.
+                        const download = new URL(downloadURL);
+                        if (download.hostname === 'github.com') {
+                            const parts = download.pathname.split('/').filter(Boolean);
+                            if (parts[2] === 'raw') {
+                                downloadURL = 'https://media.githubusercontent.com/media/' + [parts[0], parts[1], ...parts.slice(3)].join('/');
+                            }
+                        }
                         const thailand = await getJSON(downloadURL);
                         if (thailand.type !== 'FeatureCollection' || !Array.isArray(thailand.features)) throw new Error('ข้อมูลไม่ใช่ GeoJSON FeatureCollection');
 
