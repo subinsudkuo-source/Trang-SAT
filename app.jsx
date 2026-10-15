@@ -69,18 +69,21 @@ const DB = {
 };
 function DatabasePanel({onLoaded}) {
  const [username,setUsername]=useState(''); const [password,setPassword]=useState('');
- const [message,setMessage]=useState('กำลังเชื่อมฐานข้อมูลอัตโนมัติ…');
+ const [message,setMessage]=useState('');
  const [busy,setBusy]=useState(true),[needsLogin,setNeedsLogin]=useState(false);
- const connect=async(login=false)=>{setBusy(true);try{
+ const connect=async(login=false)=>{setBusy(true);setMessage('');try{
    if(login)DB.credentials='Basic '+btoa(unescape(encodeURIComponent(username+':'+password)));
-   const data=await DB.request({action:'bootstrap'});onLoaded(data);setPassword('');setNeedsLogin(false);setMessage('เชื่อมฐานข้อมูลแล้ว • วันที่ '+data.reportDate);
+   const data=await DB.request({action:'bootstrap'});onLoaded(data);setPassword('');setNeedsLogin(false);setMessage('');
  }catch(e){setNeedsLogin(e.status===401);setMessage(e.message);}finally{DB.credentials='';setBusy(false);}};
  useEffect(()=>{connect();},[]);
- return <section className="bg-white p-4 border-b flex flex-wrap gap-2 items-center">
- <strong>ฐานข้อมูล Google Sheets</strong>{needsLogin&&<><input aria-label="ชื่อผู้ใช้ฐานข้อมูล" autoComplete="username" placeholder="ชื่อผู้ใช้ (ครั้งแรก)" value={username} onChange={e=>setUsername(e.target.value)} className="border p-2 rounded"/>
- <input aria-label="รหัสผ่านฐานข้อมูล" autoComplete="current-password" placeholder="รหัสผ่าน (ครั้งแรก)" type="password" value={password} onChange={e=>setPassword(e.target.value)} className="border p-2 rounded"/></>}
- <button disabled={busy} onClick={()=>connect(needsLogin)} className="bg-blue-700 text-white p-2 rounded">{busy?'กำลังโหลด…':needsLogin?'เชื่อมต่อและจำการเข้าสู่ระบบ':'โหลดข้อมูลใหม่'}</button><span role="status">{message}</span>
- </section>;
+ if(!needsLogin&&!message)return null;
+ if(!needsLogin)return <div role="alert" className="bg-red-50 text-red-800 p-3 text-base">โหลดข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง <button disabled={busy} onClick={()=>connect()} className="underline ml-2">ลองใหม่</button></div>;
+ return <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4"><form aria-label="เข้าสู่ระบบ TRANG SAT" onSubmit={e=>{e.preventDefault();connect(true);}} className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full space-y-4 text-lg">
+ <h2 className="font-bold text-2xl">เข้าสู่ระบบ TRANG SAT</h2><p>ระบบจะจำการเข้าสู่ระบบในเบราว์เซอร์นี้</p>
+ <label className="block">ชื่อผู้ใช้<input required aria-label="ชื่อผู้ใช้" autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)} className="border p-3 rounded w-full"/></label>
+ <label className="block">รหัสผ่าน<input required aria-label="รหัสผ่าน" autoComplete="current-password" type="password" value={password} onChange={e=>setPassword(e.target.value)} className="border p-3 rounded w-full"/></label>
+ <button disabled={busy} type="submit" className="bg-blue-700 text-white p-3 rounded w-full">{busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button>{message&&<p role="alert" className="text-red-700 text-base">กรุณาตรวจสอบชื่อผู้ใช้และรหัสผ่าน แล้วลองอีกครั้ง</p>}
+ </form></div>;
 }
 
 
@@ -156,7 +159,6 @@ function App() {
  setDistrictReports(DISTRICTS.map(d=>data.reports.find(r=>r.districtId===d.id)||{districtId:d.id,districtName:d.thai,reportDate:date,status:'ปกติ',submitted:false,rain:0,waterLevel:'',trend:'',reporter:'',notes:'',updatedAt:''}));
  setPheocReports(data.pheoc);
  }} />
- <div className="bg-amber-50 text-amber-900 px-4 py-2 text-sm">หน้าตัวอย่างเดิมบางส่วนมีข้อมูลจำลอง • การเชื่อม Sheets รุ่นนี้บันทึกรายงานอำเภอจริง ส่วน AI, LINE, SMS และ Automation ยังเป็นต้นแบบ</div>
  {/* Header */}
                     <header className="bg-navy text-white shadow-lg sticky top-0 z-50">
                         <div className="max-w-7xl mx-auto px-4 py-3.5 flex flex-col md:flex-row justify-between items-center gap-3">
@@ -244,6 +246,7 @@ function App() {
 
                     {/* Footer */}
                     <footer className="bg-white border-t border-slate-200 py-4 mt-8">
+                        <p className="max-w-7xl mx-auto px-4 pb-3 text-sm text-slate-500">บางส่วนของหน้าภาพรวมยังเป็นข้อมูลตัวอย่าง • รายงานอำเภอบันทึกจริง ส่วน AI, LINE, SMS และ Automation ยังเป็นต้นแบบ</p>
                         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-2">
                             <p>© 2569 สำนักงานสาธารณสุขจังหวัดตรัง — TRANG SAT Flood Monitoring System (geoBoundaries ADM2)</p>
                             <p className="flex items-center gap-2">
