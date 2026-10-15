@@ -482,6 +482,9 @@ function App() {
             const [mapFeatures, setMapFeatures] = useState([]);
             const [mapStatus, setMapStatus] = useState("กำลังโหลดขอบเขตอำเภอจาก geoBoundaries...");
             const layerRef = useRef(null);
+            const [mapAttempt, setMapAttempt] = useState(0);
+            const [mapError, setMapError] = useState(false);
+            const [attribution, setAttribution] = useState('');
 
             const colors = [
                 "#bddff0", "#b7daca", "#f3dfa3", "#eec1a8", "#c6c7ea",
@@ -489,26 +492,30 @@ function App() {
             ];
 
             useEffect(() => {
+                const controller = new AbortController();
+                let active = true;
+                const timer = setTimeout(() => controller.abort(), 90000);
+                async function getJSON(url) {
+                    const response = await fetch(url, {signal: controller.signal});
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                }
                 async function loadMapData() {
                     const API = "https://www.geoboundaries.org/api/current/gbOpen/THA/ADM2/";
+                    setMapError(false);
+                    setMapStatus('กำลังโหลดขอบเขตจริง 10 อำเภอจาก geoBoundaries…');
                     try {
-                        const controller = new AbortController();
-                        const timer = setTimeout(() => controller.abort(), 10000);
-                        const metaRes = await fetch(API, { signal: controller.signal });
-                        if (!metaRes.ok) throw new Error("HTTP " + metaRes.status);
-                        const metadata = await metaRes.json();
-                        clearTimeout(timer);
-
-                        if (!metadata.gjDownloadURL) throw new Error("ไม่พบลิงก์ดาวน์โหลด GeoJSON");
-                        const geoRes = await fetch(metadata.gjDownloadURL);
-                        const thailand = await geoRes.json();
+                        const metadata = await getJSON(API);
+                        const downloadURL = metadata.simplifiedGeometryGeoJSON || metadata.gjDownloadURL;
+                        if (!downloadURL) throw new Error('ไม่พบลิงก์ดาวน์โหลด GeoJSON');
+                        const thailand = await getJSON(downloadURL);
+                        if (thailand.type !== 'FeatureCollection' || !Array.isArray(thailand.features)) throw new Error('ข้อมูลไม่ใช่ GeoJSON FeatureCollection');
 
                         const features = districts.map(district => {
                             const matches = thailand.features.filter(f => f.properties?.shapeName === district.english);
-                            const feature = matches[0] || {
-                                type: "Polygon",
-                                geometry: { type: "Polygon", coordinates: [[[99.3, 7.2], [99.4, 7.2], [99.4, 7.3], [99.3, 7.3], [99.3, 7.2]]] }
-                            };
+                            if (matches.length !== 1) throw new Error(`อำเภอ${district.thai}: พบ ${matches.length} พื้นที่`);
+                            const feature = matches[0];
+                            if (!['Polygon', 'MultiPolygon'].includes(feature.geometry?.type)) throw new Error(`ขอบเขตอำเภอ${district.thai}ไม่ถูกต้อง`);
                             return {
                                 ...feature,
                                 properties: {
@@ -520,32 +527,34 @@ function App() {
                             };
                         });
 
+                        if (!active) return;
                         setMapFeatures(features);
-                        setMapStatus(`โหลดสำเร็จ ${features.length} อำเภอ · geoBoundaries ADM2`);
+                        setMapStatus(`โหลดสำเร็จ ${features.length} อำเภอ · ขอบเขตปี ${metadata.boundaryYearRepresented}`);
+                        setAttribution(`geoBoundaries · ${metadata.boundarySource} · ${metadata.boundaryLicense}`);
                     } catch (err) {
-                        console.warn("geoBoundaries fallback simulation:", err);
-                        setMapStatus("ใช้ชุดข้อมูลพิกัดสำรองมาตรฐาน 10 อำเภอจังหวัดตรัง");
-                        const mockFeatures = districts.map((d, idx) => ({
-                            type: "Feature",
-                            geometry: {
-                                type: "Polygon",
-                                coordinates: [[[99.3 + idx*0.04, 7.2 + idx*0.04], [99.4 + idx*0.04, 7.2 + idx*0.04], [99.4 + idx*0.04, 7.3 + idx*0.04], [99.3 + idx*0.04, 7.3 + idx*0.04], [99.3 + idx*0.04, 7.2 + idx*0.04]]]
-                            },
-                            properties: {
-                                districtId: d.id,
-                                thaiName: d.thai,
-                                labelPoint: d.labelPoint
-                            }
-                        }));
-                        setMapFeatures(mockFeatures);
+                        if (!active) return;
+                        setMapFeatures([]);
+                        setMapError(true);
+                        setMapStatus('โหลดขอบเขตไม่สำเร็จ: ' + (err.name === 'AbortError' ? 'เกินเวลารอ กรุณาลองใหม่' : err.message));
+                    } finally {
+                        clearTimeout(timer);
                     }
                 }
                 loadMapData();
-            }, []);
+                return () => {active = false; clearTimeout(timer); controller.abort();};
+            }, [mapAttempt]);
 
             const projectionData = useMemo(() => {
                 if (!mapFeatures.length) return null;
-                let minX = 99.2, maxX = 99.9, minY = 7.1, maxY = 8.1;
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                const collect = coords => {
+                    if (typeof coords[0] === 'number') {
+                        minX = Math.min(minX, coords[0]); maxX = Math.max(maxX, coords[0]);
+                        minY = Math.min(minY, coords[1]); maxY = Math.max(maxY, coords[1]);
+                    } else coords.forEach(collect);
+                };
+                mapFeatures.forEach(f => collect(f.geometry.coordinates));
+                if (![minX,maxX,minY,maxY].every(Number.isFinite) || maxX <= minX || maxY <= minY) return null;
                 const scale = Math.min(500 / (maxX - minX), 520 / (maxY - minY));
                 const offsetX = (600 - (maxX - minX) * scale) / 2;
                 const offsetY = (620 - (maxY - minY) * scale) / 2;
@@ -633,7 +642,8 @@ function App() {
                             ) : (
                                 <div className="space-y-3">
                                     <div className="flex justify-between items-center text-xs text-slate-500">
-                                        <span id="status">{mapStatus}</span>
+                                        <span role="status" className={mapError ? 'text-red-700 text-base' : 'text-base'}>{mapStatus}</span>
+                                        {mapError && <button onClick={()=>setMapAttempt(n=>n+1)} className="border rounded px-3 py-2 bg-white">ลองโหลดใหม่</button>}
                                         <div className="flex gap-2">
                                             <button onClick={() => setZoom(z => Math.min(z + 0.25, 3))} className="px-2.5 py-1 border rounded bg-white text-xs">＋</button>
                                             <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.75))} className="px-2.5 py-1 border rounded bg-white text-xs">－</button>
@@ -641,8 +651,8 @@ function App() {
                                         </div>
                                     </div>
                                     <div className="relative overflow-hidden rounded-2xl bg-[#E8F5FA] border border-slate-200 flex items-center justify-center p-2 h-[500px]">
-                                        <svg viewBox="0 0 600 620" className="w-full h-full">
-                                            <text x="25" y="45" fill="#526a7d" fontSize="14" fontWeight="bold">N ↑ (ทะเลอันดามัน)</text>
+                                        <svg viewBox="0 0 600 620" className="w-full h-full" role="group" aria-label="แผนที่ขอบเขต 10 อำเภอ จังหวัดตรัง">
+                                            <text x="25" y="45" fill="#526a7d" fontSize="18" fontWeight="bold">N ↑</text>
                                             <g transform={`translate(${300 * (1 - zoom)}, ${310 * (1 - zoom)}) scale(${zoom})`} ref={layerRef}>
                                                 {mapFeatures.map((feature, idx) => {
                                                     const { districtId, thaiName } = feature.properties;
@@ -653,6 +663,12 @@ function App() {
                                                             key={districtId}
                                                             d={pathData}
                                                             fill={colors[idx % colors.length]}
+                                                            fillRule="evenodd"
+                                                            tabIndex={0}
+                                                            role="button"
+                                                            aria-label={'เลือกอำเภอ'+thaiName}
+                                                            aria-pressed={isSelected}
+                                                            onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setSelectedDistId(districtId);}}}
                                                             className={`district ${isSelected ? 'selected' : ''}`}
                                                             onClick={() => setSelectedDistId(districtId)}
                                                         >
@@ -672,6 +688,8 @@ function App() {
                                             </g>
                                         </svg>
                                     </div>
+                                    <p className="text-sm text-slate-600">แผนที่แสดงขอบเขตการปกครอง สีใช้แยกอำเภอ ไม่ใช่พื้นที่น้ำท่วมหรือระดับความเสี่ยง</p>
+                                    {attribution && <p className="text-sm text-slate-500">แหล่งข้อมูล: <a href="https://www.geoboundaries.org/api/current/gbOpen/THA/ADM2/" target="_blank" rel="noopener noreferrer" className="underline">{attribution}</a></p>}
                                 </div>
                             )}
                         </div>
