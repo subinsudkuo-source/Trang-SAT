@@ -56,25 +56,27 @@
 const DB = {
  credentials: '',
  async request(input) {
-   if (!this.credentials) throw new Error('กรุณาเข้าสู่ฐานข้อมูลก่อน');
-   const response = await fetch('/api/db', {method:'POST', headers:{'Content-Type':'application/json',Authorization:this.credentials},body:JSON.stringify(input)});
+   const headers={'Content-Type':'application/json'};
+   if(this.credentials)headers.Authorization=this.credentials;
+   const response = await fetch('/api/db', {method:'POST', credentials:'same-origin', headers,body:JSON.stringify(input)});
    const result = await response.json();
-   if(!result.ok) throw new Error(result.error || 'บันทึกไม่สำเร็จ');
+   if(!result.ok){const error=new Error(result.error || 'บันทึกไม่สำเร็จ');error.status=response.status;throw error;}
    return result.data;
  }
 };
 function DatabasePanel({onLoaded}) {
  const [username,setUsername]=useState(''); const [password,setPassword]=useState('');
- const [message,setMessage]=useState('โหมดตัวอย่าง — ยังไม่เชื่อมฐานข้อมูล');
- const [busy,setBusy]=useState(false);
- const connect=async()=>{setBusy(true);try{
-   DB.credentials='Basic '+btoa(unescape(encodeURIComponent(username+':'+password)));
-   const data=await DB.request({action:'bootstrap'});onLoaded(data);setPassword('');setMessage('เชื่อมฐานข้อมูลแล้ว • วันที่ '+data.reportDate);
- }catch(e){DB.credentials='';setMessage(e.message);}finally{setBusy(false);}};
+ const [message,setMessage]=useState('กำลังเชื่อมฐานข้อมูลอัตโนมัติ…');
+ const [busy,setBusy]=useState(true),[needsLogin,setNeedsLogin]=useState(false);
+ const connect=async(login=false)=>{setBusy(true);try{
+   if(login)DB.credentials='Basic '+btoa(unescape(encodeURIComponent(username+':'+password)));
+   const data=await DB.request({action:'bootstrap'});onLoaded(data);setPassword('');setNeedsLogin(false);setMessage('เชื่อมฐานข้อมูลแล้ว • วันที่ '+data.reportDate);
+ }catch(e){setNeedsLogin(e.status===401);setMessage(e.message);}finally{DB.credentials='';setBusy(false);}};
+ useEffect(()=>{connect();},[]);
  return <section className="bg-white p-4 border-b flex flex-wrap gap-2 items-center">
- <strong>ฐานข้อมูล Google Sheets</strong><input aria-label="ชื่อผู้ใช้ฐานข้อมูล" placeholder="ชื่อผู้ใช้" value={username} onChange={e=>setUsername(e.target.value)} className="border p-2 rounded"/>
- <input aria-label="รหัสผ่านฐานข้อมูล" placeholder="รหัสผ่าน" type="password" value={password} onChange={e=>setPassword(e.target.value)} className="border p-2 rounded"/>
- <button disabled={busy} onClick={connect} className="bg-blue-700 text-white p-2 rounded">{busy?'กำลังโหลด…':'เข้าสู่ฐานข้อมูล / โหลดใหม่'}</button><span role="status">{message}</span>
+ <strong>ฐานข้อมูล Google Sheets</strong>{needsLogin&&<><input aria-label="ชื่อผู้ใช้ฐานข้อมูล" autoComplete="username" placeholder="ชื่อผู้ใช้ (ครั้งแรก)" value={username} onChange={e=>setUsername(e.target.value)} className="border p-2 rounded"/>
+ <input aria-label="รหัสผ่านฐานข้อมูล" autoComplete="current-password" placeholder="รหัสผ่าน (ครั้งแรก)" type="password" value={password} onChange={e=>setPassword(e.target.value)} className="border p-2 rounded"/></>}
+ <button disabled={busy} onClick={()=>connect(needsLogin)} className="bg-blue-700 text-white p-2 rounded">{busy?'กำลังโหลด…':needsLogin?'เชื่อมต่อและจำการเข้าสู่ระบบ':'โหลดข้อมูลใหม่'}</button><span role="status">{message}</span>
  </section>;
 }
 
@@ -83,7 +85,7 @@ function DistrictPhotos({districtId,reportDate,showToast}) {
  const [photos,setPhotos]=useState([]),[busy,setBusy]=useState(false),[caption,setCaption]=useState(''),[message,setMessage]=useState('เข้าสู่ฐานข้อมูลก่อนโหลดหรืออัปโหลดภาพ');
  const fileInput=useRef(null), uploadIds=useRef(new WeakMap());
  const load=async()=>{try{const rows=await DB.request({action:'list',table:'Photos',districtId,reportDate});setPhotos(rows);setMessage(rows.length?'ภาพที่บันทึกใน Drive':'ยังไม่มีภาพสำหรับอำเภอและวันที่นี้');}catch(e){setPhotos([]);setMessage(e.message==='UNKNOWN_TABLE'?'ต้องอัปเดต Code.gs และรัน setupSystem() เพื่อเปิดระบบภาพก่อน':e.message);}};
- useEffect(()=>{setPhotos([]);if(DB.credentials)load();},[districtId,reportDate]);
+ useEffect(()=>{setPhotos([]);load();},[districtId,reportDate]);
  const upload=async()=>{
  const files=Array.from(fileInput.current.files||[]);if(!files.length){setMessage('กรุณาเลือกภาพ');return;}
  if(files.length>5){setMessage('อัปโหลดได้ครั้งละไม่เกิน 5 ภาพ');return;}
