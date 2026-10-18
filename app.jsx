@@ -433,6 +433,7 @@ function App() {
                                 </div>
                             ))}
                         </div>
+                        <PheocSituationCarousel />
                     </div>
                 </div>
             );
@@ -505,6 +506,84 @@ function App() {
                     <i className="ph ph-image text-4xl text-slate-400"></i>
                     <p role="status" className="text-sm text-slate-600">{message}</p>
                     <button type="button" onClick={() => setActiveTab('district')} className="text-blue-700 underline text-sm">ไปแนบภาพในรายงานอำเภอ</button>
+                </div>}
+            </section>;
+        }
+
+        function PheocSituationCarousel() {
+            const [items, setItems] = useState([]);
+            const [activeIndex, setActiveIndex] = useState(0);
+            const [image, setImage] = useState(null);
+            const [message, setMessage] = useState('กำลังโหลดภาพแนบประจำวัน');
+            const reportDate = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Bangkok'});
+
+            useEffect(() => {
+                let active = true;
+                const load = async () => {
+                    const [districtResult, groupResult] = await Promise.allSettled([
+                        DB.request({action:'list', table:'Photos', reportDate}),
+                        DB.request({action:'list', table:'PHEOCFiles', reportDate})
+                    ]);
+                    if (!active) return;
+                    const districtImages = districtResult.status === 'fulfilled' ? districtResult.value
+                        .filter(file => String(file.mimeType || '').startsWith('image/'))
+                        .map(file => ({...file, source:'district', label:`อำเภอ${file.districtName || ''}`, caption:file.caption || file.fileName})) : [];
+                    const groupImages = groupResult.status === 'fulfilled' ? groupResult.value
+                        .filter(file => String(file.mimeType || '').startsWith('image/'))
+                        .map(file => ({...file, source:'pheoc', label:file.group || 'กลุ่มภารกิจ PHEOC', caption:file.fileName})) : [];
+                    const ordered = [...districtImages, ...groupImages].sort((a,b) => String(b.uploadedAt || '').localeCompare(String(a.uploadedAt || '')));
+                    setItems(ordered);
+                    setActiveIndex(index => ordered.length ? index % ordered.length : 0);
+                    setMessage(ordered.length ? '' : 'วันนี้ยังไม่มีภาพแนบจากอำเภอหรือกลุ่มภารกิจ PHEOC');
+                };
+                load();
+                const refresh = setInterval(load, 60000);
+                return () => { active = false; clearInterval(refresh); };
+            }, [reportDate]);
+
+            useEffect(() => {
+                if (items.length < 2) return;
+                const timer = setInterval(() => setActiveIndex(index => (index + 1) % items.length), 5000);
+                return () => clearInterval(timer);
+            }, [items.length]);
+
+            const current = items[activeIndex];
+            useEffect(() => {
+                if (!current) { setImage(null); return; }
+                let active = true;
+                setImage(null);
+                const action = current.source === 'pheoc' ? 'getPheocFile' : 'getPhoto';
+                DB.request({action, id:current.id}).then(data => {
+                    if (active) setImage({id:current.id, src:'data:'+data.mimeType+';base64,'+data.base64});
+                }).catch(error => { if (active) setMessage('เปิดภาพแนบไม่สำเร็จ: '+error.message); });
+                return () => { active = false; };
+            }, [current?.id]);
+
+            const move = direction => {
+                if (items.length < 2) return;
+                setActiveIndex(index => (index + direction + items.length) % items.length);
+            };
+
+            return <section aria-label="ภาพสรุปการดำเนินงาน PHEOC ประจำวัน" className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                    <div>
+                        <h4 className="font-bold text-slate-800">ภาพสรุปการดำเนินงานประจำวัน</h4>
+                        <p className="text-xs text-slate-500">ภาพแนบจากรายงานอำเภอและกลุ่มภารกิจ PHEOC • เลื่อนอัตโนมัติและวนซ้ำ</p>
+                    </div>
+                    <span className="text-xs text-slate-500">{items.length ? `${activeIndex + 1} / ${items.length}` : reportDate}</span>
+                </div>
+                {current ? <div className="relative h-72 rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center">
+                    {image?.id === current.id ? <img key={current.id} src={image.src} alt={current.caption || current.label} className="w-full h-full object-contain" style={{animation:'daily-photo-slide 550ms ease-out'}} /> : <span role="status" className="text-sm text-slate-500">กำลังโหลดภาพ…</span>}
+                    {items.length > 1 && <>
+                        <button type="button" onClick={() => move(-1)} aria-label="ภาพ PHEOC ก่อนหน้า" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 text-white w-9 h-9">‹</button>
+                        <button type="button" onClick={() => move(1)} aria-label="ภาพ PHEOC ถัดไป" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 text-white w-9 h-9">›</button>
+                    </>}
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-10 text-white">
+                        <p className="text-sm font-bold">{current.label}</p>
+                        <p className="text-xs text-slate-200 truncate">{current.caption}</p>
+                    </div>
+                </div> : <div className="h-44 rounded-xl border border-dashed border-slate-300 bg-white flex items-center justify-center p-4 text-center">
+                    <p role="status" className="text-sm text-slate-600">{message}</p>
                 </div>}
             </section>;
         }
