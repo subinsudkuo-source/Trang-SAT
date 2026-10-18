@@ -530,6 +530,28 @@ function App() {
             const [mapAttempt, setMapAttempt] = useState(0);
             const [mapError, setMapError] = useState(false);
             const [attribution, setAttribution] = useState('');
+            const [casualtyReports, setCasualtyReports] = useState(districtReports);
+
+            useEffect(() => {
+                let active = true;
+                const loadCasualtyReports = async () => {
+                    try {
+                        const rows = await DB.request({action:'list', table:'DailyReports'});
+                        if (!active) return;
+                        const latestByDistrict = new Map();
+                        rows.filter(row => row?.districtId && Array.isArray(row?.floodReport?.population) && row.floodReport.population.length).forEach(row => {
+                            const previous = latestByDistrict.get(row.districtId);
+                            if (!previous || String(row.reportDate || '') > String(previous.reportDate || '')) latestByDistrict.set(row.districtId, row);
+                        });
+                        setCasualtyReports(Array.from(latestByDistrict.values()));
+                    } catch (error) {
+                        console.warn('โหลดข้อมูลยอดสะสมบนแผนที่ไม่สำเร็จ', error);
+                    }
+                };
+                loadCasualtyReports();
+                const refresh = setInterval(loadCasualtyReports, 60000);
+                return () => { active = false; clearInterval(refresh); };
+            }, []);
 
             const colors = [
                 "#bddff0", "#b7daca", "#f3dfa3", "#eec1a8", "#c6c7ea",
@@ -732,7 +754,7 @@ function App() {
                                                 {mapFeatures.map((feature) => {
                                                     const { districtId, thaiName, labelPoint } = feature.properties;
                                                     const [x, y] = project(labelPoint[0], labelPoint[1]);
-                                                    const report = districtReports.find(r => r.districtId === districtId);
+                                                    const report = casualtyReports.find(r => r.districtId === districtId) || districtReports.find(r => r.districtId === districtId);
                                                     const { deaths, injuries } = getAffectedPopulationTotals(report);
                                                     const hasCasualties = deaths > 0 || injuries > 0;
                                                     return (
