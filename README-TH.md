@@ -16,24 +16,23 @@
 ## GitHub / Vercel
 อัปโหลดทุกไฟล์ในโฟลเดอร์นี้เข้า repository ใหม่ (แนะนำ private) แล้ว import repository เข้า Vercel
 Framework Preset: Other; ไม่ต้องตั้ง build command; root directory เป็นโฟลเดอร์ที่มี index.html
-ตั้ง Environment Variables จาก .env.example ทั้ง 4 ค่า:
+ตั้ง Environment Variables จาก .env.example 2 ค่า:
 - APPS_SCRIPT_URL: URL /exec
 - APPS_SCRIPT_TOKEN: API_TOKEN จาก Script Properties
-- APP_USERNAME และ APP_PASSWORD: ชื่อผู้ใช้และรหัสผ่านสำหรับผู้ได้รับอนุญาตใช้งานฐานข้อมูล เลือกรหัสผ่านยาวและไม่ใช้ซ้ำ
-จากนั้น deploy หรือ redeploy แล้วกรอกชื่อผู้ใช้/รหัสผ่านในแถบ ฐานข้อมูล Google Sheets ด้านบนแอป
-ใช้ HTTPS ของ Vercel เท่านั้น API server ตรวจ credentials ก่อนส่งคำขอไป Apps Script และไม่ส่ง API_TOKEN ให้ browser
-รุ่นนี้ใช้บัญชีร่วมสำหรับผู้มีสิทธิทั้งหมด ยังไม่มีการแยกสิทธิรายอำเภอ/บุคคล ตัวเลือกสิทธิบนหน้าเดิมเป็นองค์ประกอบ UI ไม่ใช่การควบคุมสิทธิ server
+จากนั้น deploy หรือ redeploy ระบบจะโหลดฐานข้อมูลโดยไม่ถาม username/password
+คำเตือน: เมื่อเปิดเว็บสาธารณะ ผู้ที่มี URL สามารถอ่านและแก้ข้อมูลในชีต รวมถึงอัปโหลดภาพได้ อย่าใช้กับข้อมูลส่วนบุคคลหรือข้อมูลที่ต้องจำกัดสิทธิ
+API_TOKEN ยังเก็บฝั่ง server และไม่ส่งให้ browser แต่ API ของเว็บเปิดให้ผู้เข้าชมเรียกใช้งานได้
 
 ## ทดสอบหลังติดตั้ง
 - เข้าแอป กดเข้าสู่ฐานข้อมูล: ตารางที่ว่างจะได้แถวเริ่มต้นสำหรับ 10 อำเภอ ไม่มีการสร้างรายงานจำลองในชีต
 - เปิดรายงานประจำวันอำเภอ กรอกฝน/น้ำ/สถานะ/หมายเหตุ แล้วบันทึกร่าง ตรวจแถว DailyReports ในชีต
 - กดส่งรายงาน: อัปเดตแถวเดิมของอำเภอในวันเดียวกัน submitted=true ไม่เพิ่มซ้ำ
-- โหลดหน้าใหม่และเข้าสู่ระบบอีกครั้ง: ข้อมูลของวันนี้ต้องตรงกับชีต
-- รหัสผ่านผิดหรือ token ผิดต้องไม่อ่าน/เขียนข้อมูล
+- โหลดหน้าใหม่: ข้อมูลของวันนี้ต้องตรงกับชีต โดยไม่ต้องเข้าสู่ระบบ
+- token ผิดต้องไม่อ่าน/เขียนข้อมูลจาก Apps Script
 - API รองรับ list/upsert ของ PHEOCReports, Incidents และ SupportRequests แล้ว แต่หน้า UI เดิมของสามส่วนนี้ยังไม่ได้ผูกฟอร์มเขียนข้อมูล
 
 ## รูปแบบ API ฝั่ง server
-POST /api/db พร้อม Authorization: Basic ของ APP_USERNAME:APP_PASSWORD
+POST /api/db (ไม่ต้องใช้ Authorization)
 body: {"action":"bootstrap","reportDate":"2026-10-13"}
 body: {"action":"list","table":"DailyReports","reportDate":"2026-10-13"}
 body: {"action":"upsert","table":"DailyReports","record":{"reportDate":"2026-10-13","districtId":"d01","status":"เฝ้าระวัง","submitted":true,"rain":45.5,"waterLevel":"2.15 ม.","trend":"เพิ่มขึ้น","reporter":"SAT อำเภอ","notes":"รายงานพื้นที่"}}
@@ -53,7 +52,7 @@ body: {"action":"upsert","table":"DailyReports","record":{"reportDate":"2026-10-
 หน้าเว็บ: เข้าสู่ฐานข้อมูล → รายงานประจำวันอำเภอ → เลือกอำเภอ → เลือกภาพ → กรอกคำอธิบาย → อัปโหลดภาพลง Drive
 รองรับ JPG PNG WEBP ขนาดไม่เกิน 2 MB ต่อภาพ ครั้งละไม่เกิน 5 ภาพ อัปโหลดทีละไฟล์เพื่อไม่เกินข้อจำกัด request
 เก็บไฟล์ภาพในโฟลเดอร์ที่ระบุโดยตรง ชื่อไฟล์ประกอบด้วยวันที่ อำเภอ และ upload ID; Photos เก็บ fileId, driveUrl, districtId, reportDate, caption, uploadedAt
-API getPhoto ส่งภาพให้ผู้เข้าสู่ระบบโดยตรวจ fileId จาก Photos และโฟลเดอร์ปลายทาง ห้ามส่ง fileId อิสระเพื่ออ่านไฟล์อื่น
+API getPhoto ส่งภาพเมื่อ fileId อยู่ใน Photos และไฟล์อยู่ในโฟลเดอร์ปลายทาง เนื่องจากเว็บไม่ใช้ล็อกอิน ผู้เข้าชมเว็บอาจอ่านภาพที่มีรายการใน Photos ได้
 ไม่เปิดภาพเป็นสาธารณะ ไม่เปลี่ยนสิทธิแชร์ของโฟลเดอร์ ผู้ใช้ปุ่มเปิด Drive ต้องมีสิทธิ Drive ของไฟล์นั้น ส่วนดูภาพในแอปใช้สิทธิผ่าน API
 ยังใช้บัญชีร่วมตามระบบเดิม ไม่มีการจำกัดสิทธิภาพตามอำเภอรายบุคคล
 ถ้ากดอัปโหลดซ้ำหลัง request timeout จะใช้ upload ID เดิม ไม่เพิ่มไฟล์/แถวซ้ำ; หากบันทึก metadata ไม่สำเร็จ ไฟล์ใหม่จะถูกส่งไปถังขยะเพื่อไม่ทิ้งไฟล์ค้าง

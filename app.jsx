@@ -54,10 +54,8 @@
 
         
 const DB = {
- credentials: '',
  async request(input) {
    const headers={'Content-Type':'application/json'};
-   if(this.credentials)headers.Authorization=this.credentials;
    const response = await fetch('/api/db', {method:'POST', credentials:'same-origin', headers,body:JSON.stringify(input)});
    const result = await response.json();
    if(!result.ok){const error=new Error(result.error || 'บันทึกไม่สำเร็จ');error.status=response.status;throw error;}
@@ -68,27 +66,19 @@ const DB = {
  }
 };
 function DatabasePanel({onLoaded}) {
- const [username,setUsername]=useState(''); const [password,setPassword]=useState('');
  const [message,setMessage]=useState('');
- const [busy,setBusy]=useState(true),[needsLogin,setNeedsLogin]=useState(false);
- const connect=async(login=false)=>{setBusy(true);setMessage('');try{
-   if(login)DB.credentials='Basic '+btoa(unescape(encodeURIComponent(username+':'+password)));
-   const data=await DB.request({action:'bootstrap'});onLoaded(data);setPassword('');setNeedsLogin(false);setMessage('');
- }catch(e){setNeedsLogin(e.status===401);setMessage(e.message);}finally{DB.credentials='';setBusy(false);}};
+ const [busy,setBusy]=useState(true);
+ const connect=async()=>{setBusy(true);setMessage('');try{
+   const data=await DB.request({action:'bootstrap'});onLoaded(data);
+ }catch(e){setMessage(e.message);}finally{setBusy(false);}};
  useEffect(()=>{connect();},[]);
- if(!needsLogin&&!message)return null;
- if(!needsLogin)return <div role="alert" className="bg-red-50 text-red-800 p-3 text-base">โหลดข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง <button disabled={busy} onClick={()=>connect()} className="underline ml-2">ลองใหม่</button></div>;
- return <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4"><form aria-label="เข้าสู่ระบบ TRANG SAT" onSubmit={e=>{e.preventDefault();connect(true);}} className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full space-y-4 text-lg">
- <h2 className="font-bold text-2xl">เข้าสู่ระบบ TRANG SAT</h2><p>ระบบจะจำการเข้าสู่ระบบในเบราว์เซอร์นี้</p>
- <label className="block">ชื่อผู้ใช้<input required aria-label="ชื่อผู้ใช้" autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)} className="border p-3 rounded w-full"/></label>
- <label className="block">รหัสผ่าน<input required aria-label="รหัสผ่าน" autoComplete="current-password" type="password" value={password} onChange={e=>setPassword(e.target.value)} className="border p-3 rounded w-full"/></label>
- <button disabled={busy} type="submit" className="bg-blue-700 text-white p-3 rounded w-full">{busy?'กำลังเข้าสู่ระบบ…':'เข้าสู่ระบบ'}</button>{message&&<p role="alert" className="text-red-700 text-base">กรุณาตรวจสอบชื่อผู้ใช้และรหัสผ่าน แล้วลองอีกครั้ง</p>}
- </form></div>;
+ if(!message)return null;
+ return <div role="alert" className="bg-red-50 text-red-800 p-3 text-base">โหลดข้อมูลไม่สำเร็จ: {message} <button disabled={busy} onClick={()=>connect()} className="underline ml-2">ลองใหม่</button></div>;
 }
 
 
 function DistrictPhotos({districtId,reportDate,showToast}) {
- const [photos,setPhotos]=useState([]),[busy,setBusy]=useState(false),[caption,setCaption]=useState(''),[message,setMessage]=useState('เข้าสู่ฐานข้อมูลก่อนโหลดหรืออัปโหลดภาพ');
+ const [photos,setPhotos]=useState([]),[busy,setBusy]=useState(false),[caption,setCaption]=useState(''),[message,setMessage]=useState('กำลังโหลดภาพจากฐานข้อมูล');
  const fileInput=useRef(null), uploadIds=useRef(new WeakMap());
  const load=async()=>{try{const rows=await DB.request({action:'list',table:'Photos',districtId,reportDate});setPhotos(rows);setMessage(rows.length?'ภาพที่บันทึกใน Drive':'ยังไม่มีภาพสำหรับอำเภอและวันที่นี้');}catch(e){setPhotos([]);setMessage(e.message==='UNKNOWN_TABLE'?'ต้องอัปเดต Code.gs และรัน setupSystem() เพื่อเปิดระบบภาพก่อน':e.message);}};
  useEffect(()=>{setPhotos([]);load();},[districtId,reportDate]);
