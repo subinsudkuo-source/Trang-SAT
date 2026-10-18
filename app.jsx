@@ -539,7 +539,9 @@ function App() {
                         const rows = await DB.request({action:'list', table:'DailyReports'});
                         if (!active) return;
                         const latestByDistrict = new Map();
-                        rows.filter(row => row?.districtId && Array.isArray(row?.floodReport?.population) && row.floodReport.population.length).forEach(row => {
+                        rows.filter(row => row?.districtId && Array.isArray(row?.floodReport?.population) && row.floodReport.population.some(item =>
+                            (String(item.type || '').includes('เสียชีวิต') || String(item.type || '').includes('บาดเจ็บ')) && item.count !== '' && item.count != null
+                        )).forEach(row => {
                             const previous = latestByDistrict.get(row.districtId);
                             if (!previous || String(row.reportDate || '') > String(previous.reportDate || '')) latestByDistrict.set(row.districtId, row);
                         });
