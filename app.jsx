@@ -170,11 +170,11 @@ function App() {
                                 </div>
 
                                 <button 
-                                    onClick={() => showToast("บันทึกการตั้งค่าแจ้งเตือนเรียบร้อยแล้ว")}
+                                    onClick={() => setActiveTab('incident')}
                                     className="bg-bluePrimary hover:bg-blue-600 text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 transition shadow"
                                 >
                                     <i className="ph ph-bell-ringing text-sm"></i>
-                                    <span className="hidden sm:inline">แจ้งเตือนด่วน</span>
+                                    <span className="hidden sm:inline">แจ้งเหตุเร่งด่วน</span>
                                 </button>
                             </div>
                         </div>
@@ -1054,100 +1054,103 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
         }
 
         function IncidentView({ showToast }) {
-            const [incidents] = useState([
-                { id: 'INC-01', dist: 'นาโยง', type: 'น้ำป่าไหลหลากเข้าบ้านเรือน', time: '13 ต.ค. 2569 13:20 น.', status: 'ดำเนินการแล้ว' },
-                { id: 'INC-02', dist: 'ห้วยยอด', type: 'ดินสไลด์ปิดทับเส้นทาง รพ.สต.', time: '13 ต.ค. 2569 10:15 น.', status: 'รอการตรวจสอบ' }
-            ]);
-
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+            const [incidents, setIncidents] = useState([]);
+            const [openForm, setOpenForm] = useState(false);
+            const [busy, setBusy] = useState(false);
+            const [message, setMessage] = useState('กำลังโหลดรายการเหตุการณ์');
+            const [form, setForm] = useState({ reportDate: today, districtId: 'd01', type: '', severity: 'เร่งด่วน', description: '' });
+            const load = async () => {
+                try {
+                    const rows = await DB.request({ action: 'list', table: 'Incidents' });
+                    setIncidents(rows.sort((a, b) => String(b.updatedAt || b.reportDate).localeCompare(String(a.updatedAt || a.reportDate))));
+                    setMessage(rows.length ? '' : 'ยังไม่มีการแจ้งเหตุ');
+                } catch (error) { setMessage(`โหลดรายการไม่สำเร็จ: ${error.message}`); }
+            };
+            useEffect(() => { load(); }, []);
+            const submit = async event => {
+                event.preventDefault(); setBusy(true); setMessage('');
+                try {
+                    await DB.request({ action: 'upsert', table: 'Incidents', record: { ...form, status: 'รอการตรวจสอบ' } });
+                    await load(); setForm({ reportDate: today, districtId: 'd01', type: '', severity: 'เร่งด่วน', description: '' }); setOpenForm(false);
+                    showToast('บันทึกแจ้งเหตุเร่งด่วนแล้ว');
+                } catch (error) { setMessage(`บันทึกไม่สำเร็จ: ${error.message}`); }
+                finally { setBusy(false); }
+            };
+            const districtName = id => DISTRICTS.find(d => d.id === id)?.thai || id || 'ไม่ระบุ';
             return (
                 <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center gap-4">
                         <div>
-                            <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                                <i className="ph ph-warning-octagon text-red-500"></i>
-                                <span>ระบบแจ้งเหตุเร่งด่วน (Emergency Incident Reporting)</span>
-                            </h3>
-                            <p className="text-xs text-slate-500">แจ้งเหตุฉุกเฉิน น้ำท่วมเฉียบพลัน หรือภัยพิบัติด้านสาธารณสุขได้ตลอด 24 ชม.</p>
+                            <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><i className="ph ph-warning-octagon text-red-500"></i><span>ระบบแจ้งเหตุเร่งด่วน (Emergency Incident Reporting)</span></h3>
+                            <p className="text-xs text-slate-500">บันทึกเหตุฉุกเฉิน น้ำท่วมฉับพลัน หรือภัยด้านสาธารณสุขให้ส่วนกลางติดตามได้</p>
                         </div>
-                        <button
-                            onClick={() => showToast("บันทึกการแจ้งเหตุเร่งด่วนและส่ง SMS แจ้งเตือนผู้บริหารแล้ว!")}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow"
-                        >
-                            <i className="ph ph-plus-circle text-base"></i>
-                            <span>แจ้งเหตุเร่งด่วนใหม่</span>
-                        </button>
+                        <button type="button" onClick={() => setOpenForm(value => !value)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow shrink-0"><i className="ph ph-plus-circle text-base"></i><span>{openForm ? 'ปิดแบบฟอร์ม' : 'แจ้งเหตุเร่งด่วนใหม่'}</span></button>
                     </div>
-
+                    {openForm && <form onSubmit={submit} className="bg-white p-6 rounded-2xl border border-red-200 shadow-sm space-y-4">
+                        <h4 className="font-bold text-slate-800">รายละเอียดเหตุการณ์</h4>
+                        <div className="grid md:grid-cols-3 gap-4">
+                            <label className="text-sm space-y-1"><span>วันที่เกิดเหตุ</span><input required type="date" value={form.reportDate} onChange={e => setForm({...form, reportDate:e.target.value})} className="w-full border rounded-lg p-2" /></label>
+                            <label className="text-sm space-y-1"><span>อำเภอ</span><select value={form.districtId} onChange={e => setForm({...form, districtId:e.target.value})} className="w-full border rounded-lg p-2">{DISTRICTS.map(d=><option key={d.id} value={d.id}>{d.thai}</option>)}</select></label>
+                            <label className="text-sm space-y-1"><span>ระดับเหตุ</span><select value={form.severity} onChange={e => setForm({...form, severity:e.target.value})} className="w-full border rounded-lg p-2"><option>เร่งด่วน</option><option>วิกฤต</option><option>เฝ้าระวัง</option></select></label>
+                        </div>
+                        <label className="block text-sm space-y-1"><span>ประเภทเหตุการณ์</span><input required maxLength={200} value={form.type} onChange={e => setForm({...form, type:e.target.value})} placeholder="เช่น น้ำป่าไหลหลาก / หน่วยบริการได้รับผลกระทบ" className="w-full border rounded-lg p-2" /></label>
+                        <label className="block text-sm space-y-1"><span>รายละเอียดและความช่วยเหลือเร่งด่วนที่ต้องการ</span><textarea required maxLength={5000} value={form.description} onChange={e => setForm({...form, description:e.target.value})} rows={3} className="w-full border rounded-lg p-2" /></label>
+                        <div className="flex items-center gap-3"><button disabled={busy} className="bg-red-600 text-white px-4 py-2 rounded-lg disabled:opacity-50">{busy ? 'กำลังบันทึก…' : 'บันทึกแจ้งเหตุ'}</button><button type="button" disabled={busy} onClick={() => setOpenForm(false)} className="border px-4 py-2 rounded-lg">ยกเลิก</button><span role="status" className="text-sm text-red-700">{message}</span></div>
+                    </form>}
                     <div className="glass-card p-6 overflow-x-auto">
-                        <table className="w-full text-left text-xs">
-                            <thead>
-                                <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                                    <th className="p-3 rounded-l-lg">รหัสเหตุการณ์</th>
-                                    <th className="p-3">อำเภอ / พื้นที่</th>
-                                    <th className="p-3">ประเภทเหตุการณ์</th>
-                                    <th className="p-3">เวลาที่เกิดเหตุ</th>
-                                    <th className="p-3">สถานะ</th>
-                                    <th className="p-3 rounded-r-lg">จัดการ</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {incidents.map(inc => (
-                                    <tr key={inc.id} className="hover:bg-slate-50">
-                                        <td className="p-3 font-bold text-slate-800">{inc.id}</td>
-                                        <td className="p-3 font-medium text-slate-700">{inc.dist}</td>
-                                        <td className="p-3 text-slate-600">{inc.type}</td>
-                                        <td className="p-3 text-slate-500">{inc.time}</td>
-                                        <td className="p-3">
-                                            <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700">
-                                                {inc.status}
-                                            </span>
-                                        </td>
-                                        <td className="p-3">
-                                            <button onClick={() => showToast(`เปิดดูรายละเอียด ${inc.id}`)} className="text-bluePrimary hover:underline font-medium">ดูรายละเอียด</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
+                        <table className="w-full text-left text-xs"><thead><tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200"><th className="p-3">วันที่</th><th className="p-3">อำเภอ / พื้นที่</th><th className="p-3">ประเภทเหตุการณ์</th><th className="p-3">ระดับ</th><th className="p-3">รายละเอียด</th><th className="p-3">สถานะ</th></tr></thead>
+                            <tbody className="divide-y divide-slate-100">{incidents.map((inc, index) => <tr key={inc.id || index} className="hover:bg-slate-50"><td className="p-3 text-slate-500">{inc.reportDate}</td><td className="p-3 font-medium">{districtName(inc.districtId)}</td><td className="p-3">{inc.type}</td><td className="p-3"><span className="text-red-700 font-semibold">{inc.severity}</span></td><td className="p-3 whitespace-pre-wrap">{inc.description}</td><td className="p-3">{inc.status}</td></tr>)}</tbody>
                         </table>
+                        <p role="status" className="text-sm text-slate-500 mt-3">{message}</p>
                     </div>
                 </div>
             );
         }
 
         function SupportView({ showToast }) {
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+            const [requests, setRequests] = useState([]);
+            const [openForm, setOpenForm] = useState(false);
+            const [busy, setBusy] = useState(false);
+            const [message, setMessage] = useState('กำลังโหลดคำขอสนับสนุน');
+            const [form, setForm] = useState({ reportDate: today, districtId: 'd01', item: '', quantity: '', unit: 'รายการ', reason: '' });
+            const load = async () => {
+                try {
+                    const rows = await DB.request({ action: 'list', table: 'SupportRequests' });
+                    setRequests(rows.sort((a, b) => String(b.updatedAt || b.reportDate).localeCompare(String(a.updatedAt || a.reportDate))));
+                    setMessage(rows.length ? '' : 'ยังไม่มีคำขอสนับสนุน');
+                } catch (error) { setMessage(`โหลดรายการไม่สำเร็จ: ${error.message}`); }
+            };
+            useEffect(() => { load(); }, []);
+            const submit = async event => {
+                event.preventDefault(); setBusy(true); setMessage('');
+                try {
+                    await DB.request({ action: 'upsert', table: 'SupportRequests', record: { ...form, quantity: Number(form.quantity), status: 'รอการพิจารณา' } });
+                    await load(); setForm({ reportDate: today, districtId: 'd01', item: '', quantity: '', unit: 'รายการ', reason: '' }); setOpenForm(false);
+                    showToast('บันทึกคำขอสนับสนุนแล้ว');
+                } catch (error) { setMessage(`บันทึกไม่สำเร็จ: ${error.message}`); }
+                finally { setBusy(false); }
+            };
+            const districtName = id => DISTRICTS.find(d => d.id === id)?.thai || id || 'ไม่ระบุ';
             return (
                 <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
-                        <div>
-                            <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                                <i className="ph ph-hand-fist text-bluePrimary"></i>
-                                <span>ระบบคำขอสนับสนุนเวชภัณฑ์และทรัพยากร (Support Requests)</span>
-                            </h3>
-                            <p className="text-xs text-slate-500">ติดตามคำขอ ยารักษาโรค ชุดน้ำท่วม และกำลังพลสนับสนุนจากอำเภอต่างๆ</p>
-                        </div>
-                        <button onClick={() => showToast("เปิดฟอร์มสร้างคำขอสนับสนุนใหม่")} className="bg-bluePrimary hover:bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow">
-                            <i className="ph ph-plus-circle text-base"></i>
-                            <span>สร้างคำขอสนับสนุน</span>
-                        </button>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center gap-4">
+                        <div><h3 className="font-bold text-slate-800 text-lg flex items-center gap-2"><i className="ph ph-hand-fist text-bluePrimary"></i><span>ระบบคำขอสนับสนุนเวชภัณฑ์และทรัพยากร (Support Requests)</span></h3><p className="text-xs text-slate-500">บันทึกและติดตามคำขอยา เวชภัณฑ์ อุปกรณ์ และกำลังสนับสนุนจากแต่ละอำเภอ</p></div>
+                        <button type="button" onClick={() => setOpenForm(value => !value)} className="bg-bluePrimary hover:bg-blue-600 text-white px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 shadow shrink-0"><i className="ph ph-plus-circle text-base"></i><span>{openForm ? 'ปิดแบบฟอร์ม' : 'สร้างคำขอสนับสนุน'}</span></button>
                     </div>
-
-                    <div className="glass-card p-6">
-                        <div className="space-y-4">
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold text-slate-800 text-sm">REQ-2569-01 (อ.นาโยง)</span>
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">รอการจัดส่ง</span>
-                                    </div>
-                                    <p className="text-xs text-slate-600 mt-1"><strong>สิ่งที่ต้องการ:</strong> ยารักษาโรคและชุดน้ำท่วม 500 ชุด สำหรับแจกจ่ายผู้ประสบภัยในพื้นที่ลุ่มต่ำ</p>
-                                    <p className="text-[11px] text-slate-400 mt-1">ผู้ประสานงาน: นพ.สมชาย สาธารณสุขอำเภอนาโยง | วันที่ขอ: 13 ต.ค. 2569</p>
-                                </div>
-                                <button onClick={() => showToast("อนุมัติและมอบหมายให้กลุ่มสนับสนุนทรัพยากรจัดส่งแล้ว")} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition">
-                                    อนุมัติและจัดส่ง
-                                </button>
-                            </div>
+                    {openForm && <form onSubmit={submit} className="bg-white p-6 rounded-2xl border border-blue-200 shadow-sm space-y-4">
+                        <h4 className="font-bold text-slate-800">รายละเอียดคำขอ</h4>
+                        <div className="grid md:grid-cols-3 gap-4">
+                            <label className="text-sm space-y-1"><span>วันที่ขอ</span><input required type="date" value={form.reportDate} onChange={e => setForm({...form, reportDate:e.target.value})} className="w-full border rounded-lg p-2" /></label>
+                            <label className="text-sm space-y-1"><span>อำเภอ</span><select value={form.districtId} onChange={e => setForm({...form, districtId:e.target.value})} className="w-full border rounded-lg p-2">{DISTRICTS.map(d=><option key={d.id} value={d.id}>{d.thai}</option>)}</select></label>
+                            <label className="text-sm space-y-1"><span>จำนวน</span><input required type="number" min="0.01" step="any" value={form.quantity} onChange={e => setForm({...form, quantity:e.target.value})} className="w-full border rounded-lg p-2" /></label>
                         </div>
-                    </div>
+                        <div className="grid md:grid-cols-2 gap-4"><label className="text-sm space-y-1"><span>รายการที่ต้องการ</span><input required maxLength={200} value={form.item} onChange={e => setForm({...form, item:e.target.value})} placeholder="เช่น ชุดยาสามัญ / เรือท้องแบน" className="w-full border rounded-lg p-2" /></label><label className="text-sm space-y-1"><span>หน่วย</span><input required maxLength={50} value={form.unit} onChange={e => setForm({...form, unit:e.target.value})} className="w-full border rounded-lg p-2" /></label></div>
+                        <label className="block text-sm space-y-1"><span>เหตุผล / พื้นที่ใช้งาน</span><textarea required maxLength={3000} value={form.reason} onChange={e => setForm({...form, reason:e.target.value})} rows={3} className="w-full border rounded-lg p-2" /></label>
+                        <div className="flex items-center gap-3"><button disabled={busy} className="bg-bluePrimary text-white px-4 py-2 rounded-lg disabled:opacity-50">{busy ? 'กำลังบันทึก…' : 'ส่งคำขอ'}</button><button type="button" disabled={busy} onClick={() => setOpenForm(false)} className="border px-4 py-2 rounded-lg">ยกเลิก</button><span role="status" className="text-sm text-blue-700">{message}</span></div>
+                    </form>}
+                    <div className="glass-card p-6 overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200"><th className="p-3">วันที่</th><th className="p-3">อำเภอ</th><th className="p-3">รายการ</th><th className="p-3">จำนวน</th><th className="p-3">เหตุผล / พื้นที่ใช้งาน</th><th className="p-3">สถานะ</th></tr></thead><tbody className="divide-y divide-slate-100">{requests.map((request, index)=><tr key={request.id || index} className="hover:bg-slate-50"><td className="p-3">{request.reportDate}</td><td className="p-3 font-medium">{districtName(request.districtId)}</td><td className="p-3">{request.item}</td><td className="p-3">{request.quantity} {request.unit}</td><td className="p-3 whitespace-pre-wrap">{request.reason}</td><td className="p-3">{request.status}</td></tr>)}</tbody></table><p role="status" className="text-sm text-slate-500 mt-3">{message}</p></div>
                 </div>
             );
         }
