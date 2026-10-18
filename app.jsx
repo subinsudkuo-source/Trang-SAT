@@ -27,27 +27,19 @@
         };
 
         const callGeminiAI = async (prompt, systemInstruction = "คุณคือ AI ผู้ช่วยอัจฉริยะประจำระบบ TRANG SAT วิเคราะห์ข้อมูลอุทกภัยสาธารณสุขจังหวัดตรัง ให้คำแนะนำที่แม่นยำ กระชับ และเป็นมืออาชีพ") => {
-            const apiKey = "";
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            const apiUrl = '/api/summarize';
             
-            const payload = {
-                contents: [{ role: "user", parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: systemInstruction }] }
-            };
-
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ prompt, systemInstruction })
                 });
                 const data = await response.json();
-                if (data.candidates && data.candidates[0].content.parts[0].text) {
-                    return data.candidates[0].content.parts[0].text;
-                }
-                throw new Error("Invalid response");
+                if (!response.ok || !data.ok || !data.text) throw new Error(data.error || "AI_UNAVAILABLE");
+                return data.text;
             } catch (err) {
-                console.warn("Gemini API fallback simulation:", err);
+                console.warn("Gemini API unavailable:", err);
                 return null;
             }
         };
@@ -259,184 +251,41 @@ function App() {
 
         function ProvincialSummaryView({ districts, districtReports, pheocReports, showToast, setActiveTab }) {
             const [isAiLoading, setIsAiLoading] = useState(false);
-            const [aiSummary, setAiSummary] = useState(
-                "สรุปสถานการณ์อุทกภัยจังหวัดตรัง รอบประจำวันที่ 13 ตุลาคม 2569 เวลา 16.30 น. รวบรวมจาก 10 อำเภอและกลุ่มภารกิจ PHEOC พบว่า อำเภอนาโยงอยู่ในภาวะเสี่ยงสูง (ฝนสะสม 68.0 มม. ระดับน้ำ 3.45 ม.) มีน้ำป่าไหลหลากเข้าท่วมพื้นที่ลุ่มต่ำ 2 หมู่บ้าน ขณะที่อำเภอเมืองตรังและห้วยยอดอยู่ในเกณฑ์เฝ้าระวัง ทีมปฏิบัติการฉุกเฉิน MERT และอนามัยสิ่งแวดล้อมมีความพร้อม 95-100% สสจ.ตรัง สั่งการให้เตรียมสำรองยาและเวชภัณฑ์ชุดน้ำท่วมพร้อมแจกจ่าย"
-            );
-
-            const handleGenerateAISummary = async () => {
+            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+            const reportDate = districtReports.find(r => r.reportDate)?.reportDate || today;
+            const reportDateLabel = new Date(reportDate + 'T00:00:00+07:00').toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'long' });
+            const byId = new Map((districtReports || []).map(r => [r.districtId, r]));
+            const daily = districts.map(d => byId.get(d.id) || { districtId:d.id, districtName:d.thai, submitted:false, status:'ยังไม่ส่ง', rain:'', waterLevel:'', trend:'', notes:'' });
+            const submitted = daily.filter(r => r.submitted);
+            const risk = submitted.filter(r => ['เสี่ยงสูง','วิกฤต'].some(x => String(r.status||'').includes(x)));
+            const watch = submitted.filter(r => String(r.status||'').includes('เฝ้าระวัง'));
+            const pheoc = Array.isArray(pheocReports) ? pheocReports : [];
+            const totals = submitted.reduce((s,r) => { const t=getAffectedPopulationTotals(r); s.affected+=t.affected; s.deaths+=t.deaths; s.injuries+=t.injuries; return s; }, {affected:0,deaths:0,injuries:0});
+            const fmt = n => Number(n||0).toLocaleString('th-TH');
+            const localSummary = () => {
+                const missing=daily.filter(r=>!r.submitted).map(r=>r.districtName);
+                const ptext=pheoc.length ? pheoc.map(p=>'• '+p.group+': ความพร้อม '+(p.readiness||'ไม่ระบุ')+'; ดำเนินงาน '+(p.actions||'ไม่ระบุ')+'; ปัญหา '+(p.issues||'ไม่ระบุ')+'; แผนถัดไป '+(p.nextPlan||'ไม่ระบุ')).join('\n') : 'ยังไม่มีรายงานกลุ่มภารกิจ PHEOC';
+                return 'สรุปสถานการณ์จังหวัดตรังประจำวันที่ '+reportDateLabel+'\n\nรับรายงาน '+submitted.length+' จาก '+districts.length+' อำเภอ. '+(risk.length?'พื้นที่เสี่ยงสูง/วิกฤต: '+risk.map(r=>r.districtName).join(', ')+'.':'ยังไม่มีอำเภอที่ระบุสถานะเสี่ยงสูงหรือวิกฤตในรายงานที่ส่ง.')+' '+(watch.length?'พื้นที่เฝ้าระวัง: '+watch.map(r=>r.districtName).join(', ')+'.':'ไม่มีอำเภอที่ระบุสถานะเฝ้าระวังในรายงานที่ส่ง.')+'\n\nยอดสะสม: ประชาชนได้รับผลกระทบ '+fmt(totals.affected)+' คน, เสียชีวิต '+fmt(totals.deaths)+' ราย, บาดเจ็บ '+fmt(totals.injuries)+' ราย.\n\nรายงาน PHEOC ('+pheoc.length+' กลุ่ม):\n'+ptext+'\n\n'+(missing.length?'ติดตามรายงานที่ยังขาด: '+missing.join(', ')+'.':'ได้รับรายงานครบทุกอำเภอ.');
+            };
+            const [aiSummary,setAiSummary]=useState('');
+            useEffect(()=>{setAiSummary(localSummary());},[reportDate,districtReports,pheocReports]);
+            const generate=async()=>{
                 setIsAiLoading(true);
-                showToast("กำลังให้ Gemini AI สังเคราะห์ข้อมูลรายวัน...");
-                
-                const prompt = `จากข้อมูลรายงานอุทกภัยจังหวัดตรัง 10 อำเภอและกลุ่มภารกิจ PHEOC ประจำวันที่ 13 ต.ค. 2569:
-                - อำเภอเสี่ยงสูง: นาโยง (ฝน 68 มม., น้ำ 3.45ม.)
-                - อำเภอเฝ้าระวัง: เมืองตรัง, ห้วยยอด
-                - กลุ่มภารกิจ PHEOC: MERT พร้อม 100%, อนามัยสิ่งแวดล้อมพร้อม 95%
-                กรุณาสรุปสถานการณ์ภาพรวมจังหวัดประจำวันสำหรับผู้บริหารในรูปแบบทางการ กระชับ เป็นมืออาชีพ พร้อมระบุประเด็นเร่งด่วนและข้อเสนอแนะในการปฏิบัติการ`;
-
-                const result = await callGeminiAI(prompt);
-                if (result) {
-                    setAiSummary(result);
-                    showToast("สร้างสรุปสถานการณ์ด้วย AI สำเร็จ!");
-                } else {
-                    setAiSummary("สรุปสถานการณ์อุทกภัยจังหวัดตรัง: พบพื้นที่เสี่ยงสูงบริเวณอำเภอนาโยงและห้วยยอด ทีม PHEOC ทุกกลุ่มมีความพร้อมสูง สสจ.ตรัง สั่งการให้เตรียมสำรองเวชภัณฑ์และออกหน่วยแพทย์เคลื่อนที่ช่วยเหลือผู้ประสบภัยทันที");
-                }
+                const payload={reportDate,districts:daily.map(r=>{const t=getAffectedPopulationTotals(r);return {districtName:r.districtName,submitted:!!r.submitted,status:r.status||'',rain:r.rain??'',waterLevel:r.waterLevel||'',trend:r.trend||'',notes:r.notes||'',summary:r.floodReport?.summary||'',affected:t.affected,deaths:t.deaths,injuries:t.injuries};}),pheoc:pheoc.map(p=>({group:p.group,readiness:p.readiness,personnel:p.personnel,actions:p.actions,issues:p.issues,nextPlan:p.nextPlan}))};
+                const prompt='สังเคราะห์ข้อมูล JSON นี้เป็นรายงานภาษาไทยทางการสำหรับผู้บริหาร ระบุวันที่ จำนวนอำเภอส่ง/ขาด พื้นที่เสี่ยงและเฝ้าระวัง ยอดผลกระทบ/เสียชีวิต/บาดเจ็บ และงาน/ปัญหา/แผนของทุกกลุ่ม PHEOC พร้อมข้อเสนอแนะ ห้ามแต่งข้อมูล และบอกเมื่อข้อมูลขาด:\n'+JSON.stringify(payload);
+                const result=await callGeminiAI(prompt);
+                if(result){setAiSummary(result);showToast('Gemini Flash สรุปข้อมูลรายวันสำเร็จ');}
+                else{setAiSummary(localSummary()+'\n\nหมายเหตุ: ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน Vercel จึงแสดงสรุปจากข้อมูลจริงอัตโนมัติ');showToast('ยังไม่ได้ตั้งค่า Gemini; แสดงสรุปข้อมูลจริงแทน');}
                 setIsAiLoading(false);
             };
-
-            const submittedCount = districtReports.filter(r => r.submitted).length;
-
-            return (
-                <div className="space-y-6">
-                    <div className="bg-gradient-to-r from-navy to-bluePrimary text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <div className="flex items-center gap-2 text-cyan-300 text-xs font-semibold uppercase tracking-wider mb-1">
-                                <i className="ph ph-newspaper"></i>
-                                <span>รายงานทางการจังหวัดตรัง (Provincial Daily Report & PHEOC Integration)</span>
-                            </div>
-                            <h2 className="text-2xl font-bold">สรุปสถานการณ์อุทกภัยและรายงานประจำวัน</h2>
-                            <p className="text-slate-200 text-xs mt-1">ประจำรอบวันที่ 13 ตุลาคม 2569 | เวลาตัดยอดข้อมูล 16.30 น. | ดึงข้อมูลอัตโนมัติจาก 10 อำเภอและกลุ่มภารกิจ</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <button 
-                                onClick={() => window.print()}
-                                className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition"
-                            >
-                                <i className="ph ph-printer text-base"></i>
-                                <span>พิมพ์ / ส่งออก PDF</span>
-                            </button>
-                            <button 
-                                onClick={() => showToast("คัดลอกข้อความสรุปสำหรับส่งเข้ากลุ่ม LINE OA สำเร็จ!")}
-                                className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-medium flex items-center gap-2 transition shadow"
-                            >
-                                <i className="ph ph-share-network text-base"></i>
-                                <span>แชร์เข้า LINE OA</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* AI Summary Card */}
-                    <div className="glass-card p-6 border-l-4 border-l-bluePrimary bg-gradient-to-br from-white to-blueLight/30">
-                        <div className="flex justify-between items-center mb-3">
-                            <div className="flex items-center gap-2">
-                                <i className="ph-fill ph-sparkle text-blue-600 text-xl"></i>
-                                <h3 className="font-bold text-slate-800">วิเคราะห์และสังเคราะห์สถานการณ์ประจำวันโดย AI (Gemini Flash) จากรายงานอำเภอและ PHEOC</h3>
-                            </div>
-                            <button
-                                onClick={handleGenerateAISummary}
-                                disabled={isAiLoading}
-                                className="bg-bluePrimary hover:bg-blue-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition shadow disabled:opacity-50"
-                            >
-                                <i className={`ph ph-arrows-clockwise ${isAiLoading ? 'animate-spin' : ''}`}></i>
-                                <span>{isAiLoading ? 'กำลังประมวลผล...' : 'สังเคราะห์ข้อมูลใหม่'}</span>
-                            </button>
-                        </div>
-                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-white/80 p-4 rounded-xl border border-blue-100">
-                            {aiSummary}
-                        </p>
-                    </div>
-
-                    {/* Grid Section: Overview & Photos */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="glass-card p-6 lg:col-span-2 space-y-4">
-                            <div className="flex justify-between items-center">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                                    <i className="ph ph-chart-bar text-bluePrimary text-lg"></i>
-                                    <span>สถานะการส่งรายงานและสรุป 10 อำเภอ</span>
-                                </h3>
-                                <button 
-                                    onClick={() => setActiveTab('map')}
-                                    className="text-xs text-bluePrimary font-semibold hover:underline flex items-center gap-1"
-                                >
-                                    <span>เปิดแผนที่ geoBoundaries</span> <i className="ph ph-arrow-right"></i>
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-                                    <p className="text-xs text-slate-500">รายงานส่งแล้ว</p>
-                                    <p className="text-2xl font-bold text-emerald-600 mt-1">{submittedCount} / 10</p>
-                                    <p className="text-[10px] text-emerald-600 font-medium mt-1">ครบตามกำหนดรอบ</p>
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-                                    <p className="text-xs text-slate-500">พื้นที่เสี่ยงสูง</p>
-                                    <p className="text-2xl font-bold text-red-600 mt-1">1 อำเภอ</p>
-                                    <p className="text-[10px] text-red-600 font-medium mt-1">อำเภอนาโยง</p>
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-                                    <p className="text-xs text-slate-500">เฝ้าระวัง</p>
-                                    <p className="text-2xl font-bold text-amber-600 mt-1">2 อำเภอ</p>
-                                    <p className="text-[10px] text-amber-600 font-medium mt-1">เมืองตรัง, ห้วยยอด</p>
-                                </div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
-                                    <p className="text-xs text-slate-500">กลุ่ม PHEOC</p>
-                                    <p className="text-2xl font-bold text-blue-600 mt-1">3 กลุ่ม</p>
-                                    <p className="text-[10px] text-blue-600 font-medium mt-1">พร้อมปฏิบัติการ</p>
-                                </div>
-                            </div>
-
-                            <div className="mt-4 overflow-x-auto">
-                                <table className="w-full text-left text-xs">
-                                    <thead>
-                                        <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                                            <th className="p-2.5 rounded-l-lg">อำเภอ</th>
-                                            <th className="p-2.5">สถานะ</th>
-                                            <th className="p-2.5">ปริมาณฝน</th>
-                                            <th className="p-2.5">ระดับน้ำ / แนวโน้ม</th>
-                                            <th className="p-2.5 rounded-r-lg">รายงาน</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {districtReports.map(r => (
-                                            <tr key={r.districtId} className="hover:bg-slate-50">
-                                                <td className="p-2.5 font-medium text-slate-800">{r.districtName}</td>
-                                                <td className="p-2.5">
-                                                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                                        r.status === 'เสี่ยงสูง' ? 'bg-red-100 text-red-700' :
-                                                        r.status === 'เฝ้าระวัง' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                                                    }`}>
-                                                        {r.status}
-                                                    </span>
-                                                </td>
-                                                <td className="p-2.5 text-slate-600">{r.rain} มม.</td>
-                                                <td className="p-2.5 text-slate-600">{r.waterLevel}</td>
-                                                <td className="p-2.5">
-                                                    <span className={`text-[11px] font-medium ${r.submitted ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                        {r.submitted ? '✓ ส่งแล้ว' : '⏳ รอส่ง'}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <DailyPhotoCarousel setActiveTab={setActiveTab} />
-                    </div>
-
-                    <div className="glass-card p-6 space-y-4">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                            <i className="ph ph-users-three text-bluePrimary text-lg"></i>
-                            <span>สรุปการดำเนินงานกลุ่มภารกิจ PHEOC จังหวัดประจำวัน</span>
-                        </h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {pheocReports.map(p => (
-                                <div key={p.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="font-bold text-sm text-slate-800">{p.group}</h4>
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">{p.readiness}</span>
-                                    </div>
-                                    <p className="text-xs text-slate-600"><strong>บุคลากร:</strong> {p.personnel}</p>
-                                    <p className="text-xs text-slate-600"><strong>การดำเนินงาน:</strong> {p.actions}</p>
-                                    <p className="text-xs text-slate-600"><strong>แผนงานถัดไป:</strong> {p.nextPlan}</p>
-                                </div>
-                            ))}
-                        </div>
-                        <PheocSituationCarousel />
-                    </div>
-                </div>
-            );
+            return <div id="provincial-report" className="space-y-6">
+                <header className="bg-gradient-to-r from-navy to-bluePrimary text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4"><div><p className="text-cyan-300 text-xs mb-1">รายงานจังหวัดตรัง • รายงานอำเภอและ PHEOC</p><h2 className="text-2xl font-bold">สรุปสถานการณ์อุทกภัยและรายงานประจำวัน</h2><p className="text-slate-200 text-xs mt-1">ประจำวันที่ {reportDateLabel} | ข้อมูลที่บันทึกในระบบ</p></div><button type="button" onClick={()=>window.print()} className="no-print bg-white/10 border border-white/20 px-4 py-2 rounded-xl text-xs"><i className="ph ph-printer mr-2"></i>พิมพ์ / บันทึกเป็น PDF</button></header>
+                <section className="glass-card p-6 border-l-4 border-l-bluePrimary"><div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-3"><h3 className="font-bold text-slate-800">วิเคราะห์และสังเคราะห์สถานการณ์ประจำวันโดย AI (Gemini Flash) จากรายงานอำเภอและ PHEOC</h3><button type="button" onClick={generate} disabled={isAiLoading} className="no-print bg-bluePrimary text-white px-3.5 py-1.5 rounded-lg text-xs disabled:opacity-50">{isAiLoading?'กำลังสรุป...':'ให้ AI สรุปข้อมูลวันนี้'}</button></div><p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-white p-4 rounded-xl border">{aiSummary||localSummary()}</p></section>
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[['อำเภอส่งรายงาน',submitted.length+' / '+districts.length],['เสี่ยงสูง / วิกฤต',risk.length+' อำเภอ'],['เฝ้าระวัง',watch.length+' อำเภอ'],['ได้รับผลกระทบ',fmt(totals.affected)+' คน'],['เสียชีวิต / บาดเจ็บ',fmt(totals.deaths)+' / '+fmt(totals.injuries)+' ราย']].map(([l,v])=><div key={l} className="glass-card p-4 text-center"><p className="text-xs text-slate-500">{l}</p><p className="text-xl font-bold mt-1 text-blue-700">{v}</p></div>)}</div>
+                <section className="glass-card p-5 space-y-3"><div className="flex justify-between"><h3 className="font-bold">สถานการณ์รายอำเภอ (ครบทั้ง {districts.length} อำเภอ)</h3><button type="button" onClick={()=>setActiveTab('district')} className="no-print text-xs text-bluePrimary">เปิดรายงานอำเภอ</button></div><div className="overflow-x-auto"><table className="w-full text-left text-xs min-w-[760px]"><thead><tr className="bg-slate-100"><th className="p-2">อำเภอ</th><th className="p-2">สถานะ</th><th className="p-2">ฝน</th><th className="p-2">ระดับน้ำ / แนวโน้ม</th><th className="p-2">ผลกระทบ</th><th className="p-2">เสียชีวิต / บาดเจ็บ</th><th className="p-2">รายละเอียด</th></tr></thead><tbody className="divide-y">{daily.map(r=>{const t=getAffectedPopulationTotals(r);return <tr key={r.districtId} className="align-top"><td className="p-2 font-semibold">{r.districtName}</td><td className="p-2">{r.submitted?(r.status||'ส่งแล้ว'):'ยังไม่ส่ง'}</td><td className="p-2">{r.rain===''||r.rain==null?'—':r.rain+' มม.'}</td><td className="p-2">{[r.waterLevel,r.trend].filter(Boolean).join(' • ')||'—'}</td><td className="p-2">{fmt(t.affected)} คน</td><td className="p-2">{fmt(t.deaths)} / {fmt(t.injuries)}</td><td className="p-2 whitespace-pre-line">{r.submitted?(r.notes||r.floodReport?.summary||'ส่งรายงานแล้ว (ไม่มีบันทึกเพิ่มเติม)'):'รอข้อมูลจาก สสอ.'}</td></tr>;})}</tbody></table></div></section>
+                <section className="glass-card p-6 space-y-4"><h3 className="font-bold">สรุปการดำเนินงานกลุ่มภารกิจ PHEOC จังหวัดประจำวัน</h3>{pheoc.length?<div className="grid grid-cols-1 md:grid-cols-2 gap-4">{pheoc.map((p,i)=><article key={p.id||p.group||i} className="bg-slate-50 p-4 rounded-xl border space-y-2 break-inside-avoid"><div className="flex justify-between"><h4 className="font-bold text-sm">{p.group||'กลุ่มภารกิจ'}</h4><span className="text-xs">{p.readiness||'ความพร้อมไม่ระบุ'}</span></div><p className="text-xs"><b>บุคลากร:</b> {p.personnel||'ไม่ระบุ'}</p><p className="text-xs"><b>ดำเนินงาน:</b> {p.actions||'ไม่ระบุ'}</p><p className="text-xs"><b>ปัญหา/อุปสรรค:</b> {p.issues||'ไม่ระบุ'}</p><p className="text-xs"><b>แผนถัดไป:</b> {p.nextPlan||'ไม่ระบุ'}</p></article>)}</div>:<p className="text-sm bg-amber-50 p-3">วันนี้ยังไม่มีรายงานกลุ่มภารกิจ PHEOC ในฐานข้อมูล</p>}</section>
+                <div className="no-print grid grid-cols-1 lg:grid-cols-3 gap-6"><DailyPhotoCarousel setActiveTab={setActiveTab}/><PheocSituationCarousel/></div>
+            </div>;
         }
 
         function DailyPhotoCarousel({ setActiveTab }) {
