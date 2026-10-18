@@ -1,0 +1,34 @@
+name: Send daily Trang SAT summary to LINE
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+      timezone: Asia/Bangkok
+    - cron: '0 18 * * *'
+      timezone: Asia/Bangkok
+
+permissions:
+  contents: read
+
+jobs:
+  send-summary:
+    runs-on: ubuntu-latest
+    if: ${{ vars.LINE_DAILY_SEND_ENABLED == 'true' }}
+    steps:
+      - name: Send summary to the configured LINE group
+        env:
+          CRON_SECRET: ${{ secrets.TRANG_SAT_CRON_SECRET }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing repository secret TRANG_SAT_CRON_SECRET"
+            exit 1
+          fi
+          SLOT="08:00"
+          if [ "$EVENT_SCHEDULE" = "0 18 * * *" ]; then SLOT="18:00"; fi
+          BODY=$(jq -n --arg slot "$SLOT" '{slot:$slot}')
+          curl --fail-with-body --silent --show-error \
+            -X POST "https://trang-sat.vercel.app/api/line-daily-summary" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H 'Content-Type: application/json' \
+            --data "$BODY"
