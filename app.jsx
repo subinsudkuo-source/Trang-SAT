@@ -710,10 +710,9 @@ function App() {
                                                             </text>
                                                             {hasPopulationData && <g aria-label={`อำเภอ${thaiName} เสียชีวิต ${deaths} ราย บาดเจ็บ ${injuries} ราย ประสบภัย ${affected} คน`}>
                                                                 <title>{`อำเภอ${thaiName} • เสียชีวิต ${deaths.toLocaleString('th-TH')} ราย • บาดเจ็บ ${injuries.toLocaleString('th-TH')} ราย • ประชาชนประสบภัย ${affected.toLocaleString('th-TH')} คน (ยอดสะสม)`}</title>
-                                                                <rect x={x - 43} y={y + 10} width="86" height="45" rx="7" fill="#ffffff" fillOpacity="0.97" stroke="#94a3b8" strokeWidth="0.8" />
-                                                                <text x={x} y={y + 21} fontSize="9" fontWeight="700" fill="#991b1b">🪦 {deaths.toLocaleString('th-TH')}</text>
-                                                                <text x={x} y={y + 33} fontSize="9" fontWeight="700" fill="#1d4ed8">🩹 {injuries.toLocaleString('th-TH')}</text>
-                                                                <text x={x} y={y + 46} fontSize="9" fontWeight="700" fill="#047857">👥 {affected.toLocaleString('th-TH')}</text>
+                                                                <text x={x - 35} y={y + 27} fontSize="10" fontWeight="800" fill="#7f1d1d" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">🪦 {deaths.toLocaleString('th-TH')}</text>
+                                                                <text x={x} y={y + 27} fontSize="10" fontWeight="800" fill="#1e3a8a" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">🩹 {injuries.toLocaleString('th-TH')}</text>
+                                                                <text x={x + 38} y={y + 27} fontSize="10" fontWeight="800" fill="#14532d" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">👥 {affected.toLocaleString('th-TH')}</text>
                                                             </g>}
                                                         </g>
                                                     );
