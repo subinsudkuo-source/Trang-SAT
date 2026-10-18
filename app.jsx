@@ -411,40 +411,7 @@ function App() {
                             </div>
                         </div>
 
-                        <div className="glass-card p-6 space-y-4">
-                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                                <i className="ph ph-image text-bluePrimary text-lg"></i>
-                                <span>ภาพถ่ายสถานการณ์ประจำวัน</span>
-                            </h3>
-
-                            <div className="space-y-3">
-                                <div className="group relative rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100">
-                                    <img 
-                                        src="https://placehold.co/600x350/102D50/FFFFFF?text=Trang+Flood+Situation+NaYong" 
-                                        alt="ภาพสถานการณ์อุทกภัยอำเภอนาโยง" 
-                                        className="w-full h-40 object-cover group-hover:scale-105 transition duration-300"
-                                        onError={(e)=>{e.target.src='https://placehold.co/600x350/102D50/FFFFFF?text=Image+Unavailable';}}
-                                    />
-                                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 text-white">
-                                        <p className="text-xs font-bold">อ.นาโยง (จุดเสี่ยงน้ำป่าหลาก)</p>
-                                        <p className="text-[10px] text-slate-300">ถ่ายเมื่อ 13 ต.ค. 2569 14:15 น.</p>
-                                    </div>
-                                </div>
-
-                                <div className="group relative rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-slate-100">
-                                    <img 
-                                        src="https://placehold.co/600x350/258DCE/FFFFFF?text=Medical+Team+Deployment" 
-                                        alt="ภาพทีมแพทย์เคลื่อนที่ MERT" 
-                                        className="w-full h-40 object-cover group-hover:scale-105 transition duration-300"
-                                        onError={(e)=>{e.target.src='https://placehold.co/600x350/258DCE/FFFFFF?text=Image+Unavailable';}}
-                                    />
-                                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 text-white">
-                                        <p className="text-xs font-bold">ทีม MERT สสจ.ตรัง ลงพื้นที่เยี่ยมผู้ป่วย</p>
-                                        <p className="text-[10px] text-slate-300">ถ่ายเมื่อ 13 ต.ค. 2569 11:30 น.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <DailyPhotoCarousel setActiveTab={setActiveTab} />
                     </div>
 
                     <div className="glass-card p-6 space-y-4">
@@ -469,6 +436,88 @@ function App() {
                     </div>
                 </div>
             );
+        }
+
+        function DailyPhotoCarousel({ setActiveTab }) {
+            const [photos, setPhotos] = useState([]);
+            const [activeIndex, setActiveIndex] = useState(0);
+            const [image, setImage] = useState(null);
+            const [message, setMessage] = useState('กำลังโหลดภาพประจำวันที่ ' + new Date().toLocaleDateString('th-TH', {timeZone:'Asia/Bangkok'}));
+            const reportDate = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Bangkok'});
+
+            useEffect(() => {
+                let active = true;
+                const load = () => DB.request({action:'list', table:'Photos', reportDate}).then(rows => {
+                    if (!active) return;
+                    const ordered = rows.slice().sort((a,b) => String(b.uploadedAt).localeCompare(String(a.uploadedAt)));
+                    setPhotos(ordered);
+                    setActiveIndex(index => ordered.length ? index % ordered.length : 0);
+                    setMessage(ordered.length ? '' : 'วันนี้ยังไม่มีภาพแนบจากอำเภอ');
+                }).catch(e => { if (active) setMessage('โหลดรายการภาพไม่สำเร็จ: ' + e.message); });
+                load();
+                const timer = setInterval(load, 60000);
+                return () => { active = false; clearInterval(timer); };
+            }, [reportDate]);
+
+            useEffect(() => {
+                if (photos.length < 2) return;
+                const timer = setInterval(() => setActiveIndex(index => (index + 1) % photos.length), 5000);
+                return () => clearInterval(timer);
+            }, [photos.length]);
+
+            const current = photos[activeIndex];
+            useEffect(() => {
+                if (!current) { setImage(null); return; }
+                let active = true;
+                setImage(null);
+                DB.request({action:'getPhoto', id:current.id}).then(data => {
+                    if (active) setImage({id:current.id, src:'data:'+data.mimeType+';base64,'+data.base64});
+                }).catch(e => { if (active) setMessage('เปิดภาพไม่สำเร็จ: ' + e.message); });
+                return () => { active = false; };
+            }, [current?.id]);
+
+            const move = direction => {
+                if (photos.length < 2) return;
+                setActiveIndex(index => (index + direction + photos.length) % photos.length);
+            };
+
+            return <section className="glass-card p-6 space-y-4" aria-label="ภาพถ่ายสถานการณ์ประจำวัน">
+                <style>{`@keyframes daily-photo-slide { from { opacity: .55; transform: translateX(7%); } to { opacity: 1; transform: translateX(0); } }`}</style>
+                <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <i className="ph ph-image text-bluePrimary text-lg"></i>
+                        <span>ภาพถ่ายสถานการณ์ประจำวัน</span>
+                    </h3>
+                    <span className="text-[11px] text-slate-500">{photos.length ? `${activeIndex + 1} / ${photos.length}` : reportDate}</span>
+                </div>
+                <p className="text-xs text-slate-500">ภาพแนบจากรายงานของทุกอำเภอ • เลื่อนอัตโนมัติและวนซ้ำ</p>
+                {current ? <div className="relative rounded-xl overflow-hidden border border-slate-200 bg-slate-100 h-64 flex items-center justify-center">
+                    {image?.id === current.id ? <img key={current.id} src={image.src} alt={current.caption || `ภาพสถานการณ์อำเภอ${current.districtName}`} className="w-full h-full object-contain" style={{animation:'daily-photo-slide 550ms ease-out'}} /> : <span role="status" className="text-sm text-slate-500">กำลังโหลดภาพ…</span>}
+                    {photos.length > 1 && <>
+                        <button type="button" onClick={() => move(-1)} aria-label="ภาพก่อนหน้า" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white w-9 h-9">‹</button>
+                        <button type="button" onClick={() => move(1)} aria-label="ภาพถัดไป" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white w-9 h-9">›</button>
+                    </>}
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-10 text-white">
+                        <p className="text-sm font-bold">อำเภอ{current.districtName}</p>
+                        <p className="text-xs text-slate-200 truncate">{current.caption || current.fileName}</p>
+                    </div>
+                </div> : <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 h-64 flex flex-col items-center justify-center gap-3 text-center p-4">
+                    <i className="ph ph-image text-4xl text-slate-400"></i>
+                    <p role="status" className="text-sm text-slate-600">{message}</p>
+                    <button type="button" onClick={() => setActiveTab('district')} className="text-blue-700 underline text-sm">ไปแนบภาพในรายงานอำเภอ</button>
+                </div>}
+            </section>;
+        }
+
+        function getAffectedPopulationTotals(report) {
+            const rows = report?.floodReport?.population || [];
+            return rows.reduce((totals, row) => {
+                const count = Number(row.count);
+                if (!Number.isFinite(count) || count <= 0) return totals;
+                if (String(row.type || '').includes('เสียชีวิต')) totals.deaths += count;
+                else if (String(row.type || '').includes('บาดเจ็บ')) totals.injuries += count;
+                return totals;
+            }, { deaths: 0, injuries: 0 });
         }
 
         function GoogleAndGeoMap({ districts, districtReports, showToast }) {
@@ -683,16 +732,27 @@ function App() {
                                                 {mapFeatures.map((feature) => {
                                                     const { districtId, thaiName, labelPoint } = feature.properties;
                                                     const [x, y] = project(labelPoint[0], labelPoint[1]);
+                                                    const report = districtReports.find(r => r.districtId === districtId);
+                                                    const { deaths, injuries } = getAffectedPopulationTotals(report);
+                                                    const hasCasualties = deaths > 0 || injuries > 0;
                                                     return (
-                                                        <text key={'l-' + districtId} x={x} y={y} className="map-label" textAnchor="middle" dominantBaseline="middle">
-                                                            {thaiName}
-                                                        </text>
+                                                        <g key={'l-' + districtId} textAnchor="middle">
+                                                            <text x={x} y={y} className="map-label" dominantBaseline="middle" fontSize="14" fontWeight="700" fill="#17324d" paintOrder="stroke" stroke="#ffffff" strokeWidth="3" strokeLinejoin="round">
+                                                                {thaiName}
+                                                            </text>
+                                                            {hasCasualties && <g aria-label={`อำเภอ${thaiName} เสียชีวิต ${deaths} ราย บาดเจ็บ ${injuries} ราย`}>
+                                                                <title>{`อำเภอ${thaiName} • เสียชีวิต ${deaths.toLocaleString('th-TH')} ราย • บาดเจ็บ ${injuries.toLocaleString('th-TH')} ราย (ยอดสะสม)`}</title>
+                                                                <rect x={x - 34} y={y + 10} width="68" height="31" rx="7" fill="#ffffff" fillOpacity="0.96" stroke="#94a3b8" strokeWidth="0.8" />
+                                                                <text x={x} y={y + 22} fontSize="10" fontWeight="700" fill="#991b1b">🪦 {deaths.toLocaleString('th-TH')}</text>
+                                                                <text x={x} y={y + 35} fontSize="10" fontWeight="700" fill="#1d4ed8">🩹 {injuries.toLocaleString('th-TH')}</text>
+                                                            </g>}
+                                                        </g>
                                                     );
                                                 })}
                                             </g>
                                         </svg>
                                     </div>
-                                    <p className="text-sm text-slate-600">แผนที่แสดงขอบเขตการปกครอง สีใช้แยกอำเภอ ไม่ใช่พื้นที่น้ำท่วมหรือระดับความเสี่ยง</p>
+                                    <p className="text-sm text-slate-600">แผนที่แสดงขอบเขตการปกครอง สีใช้แยกอำเภอ ไม่ใช่พื้นที่น้ำท่วมหรือระดับความเสี่ยง • เมื่อมีข้อมูล จะแสดง 🪦 ผู้เสียชีวิต และ 🩹 ผู้บาดเจ็บ (ยอดสะสม) ใต้ชื่ออำเภอ</p>
                                     {attribution && <p className="text-sm text-slate-500">แหล่งข้อมูล: <a href="https://www.geoboundaries.org/api/current/gbOpen/THA/ADM2/" target="_blank" rel="noopener noreferrer" className="underline">{attribution}</a></p>}
                                 </div>
                             )}
