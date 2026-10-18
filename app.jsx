@@ -926,7 +926,14 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
  </div>;
 }
 
+        const PHEOC_UPLOAD_GROUPS = [
+            'ทีมปฏิบัติการฉุกเฉินทางการแพทย์ (MERT / EMT)',
+            'กลุ่มอนามัยสิ่งแวดล้อมและควบคุมโรค',
+            'กลุ่มสนับสนุนทรัพยากรและเวชภัณฑ์'
+        ];
         function PheocView({ reports, setReports, showToast }) {
+            const [reportDate, setReportDate] = useState(new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10));
+            const groups = [...new Set([...(reports || []).map(p => p.group).filter(Boolean), ...PHEOC_UPLOAD_GROUPS])];
             return (
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
@@ -935,34 +942,87 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
                                 <i className="ph ph-users-three text-bluePrimary"></i>
                                 <span>รายงานความพร้อมกลุ่มภารกิจ PHEOC จังหวัดตรัง</span>
                             </h3>
-                            <p className="text-xs text-slate-500">ติดตามความพร้อมทรัพยากร บุคลากร และแผนปฏิบัติการฉุกเฉินทางการแพทย์</p>
+                            <p className="text-xs text-slate-500">เลือกวันที่ แล้วแนบไฟล์รายงานของแต่ละกลุ่ม ระบบจัดเก็บลง Google Drive แยกโฟลเดอร์ตามกลุ่ม</p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {reports.map((p) => (
-                            <div key={p.id} className="glass-card p-6 space-y-4">
-                                <div className="flex justify-between items-start">
-                                    <h4 className="font-bold text-slate-800 text-base">{p.group}</h4>
-                                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">{p.readiness}</span>
+                    <div className="bg-white p-4 rounded-xl border flex items-center gap-3">
+                        <label className="font-medium" htmlFor="pheoc-report-date">วันที่รายงาน</label>
+                        <input id="pheoc-report-date" type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="border rounded-lg p-2" />
+                    </div>
+
+                    {!reports?.length && <p className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">ยังไม่มีข้อมูลความพร้อมในชีต แต่สามารถส่งไฟล์รายวันของแต่ละกลุ่มได้</p>}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {groups.map(group => {
+                            const p = (reports || []).find(item => item.group === group);
+                            return <div key={group} className="glass-card p-5 space-y-4">
+                                <div className="flex justify-between items-start gap-3">
+                                    <h4 className="font-bold text-slate-800 text-base">{group}</h4>
+                                    {p?.readiness && <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">{p.readiness}</span>}
                                 </div>
-                                <div className="space-y-2 text-xs text-slate-600">
+                                {p && <div className="space-y-2 text-xs text-slate-600">
                                     <p><strong>บุคลากร:</strong> {p.personnel}</p>
                                     <p><strong>การดำเนินการแล้ว:</strong> {p.actions}</p>
                                     <p><strong>ปัญหา/อุปสรรค:</strong> <span className="text-amber-600 font-medium">{p.issues}</span></p>
                                     <p><strong>แผนงานถัดไป:</strong> {p.nextPlan}</p>
-                                </div>
-                                <button
-                                    onClick={() => showToast(`อัปเดตข้อมูลกลุ่ม ${p.group} เรียบร้อย`)}
-                                    className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-xl text-xs font-medium transition"
-                                >
-                                    แก้ไขรายงานกลุ่มภารกิจ
-                                </button>
-                            </div>
-                        ))}
+                                </div>}
+                                <PheocDailyFiles key={group + reportDate} group={group} reportDate={reportDate} showToast={showToast} />
+                            </div>;
+                        })}
                     </div>
                 </div>
             );
+        }
+
+        function PheocDailyFiles({ group, reportDate, showToast }) {
+            const [files, setFiles] = useState([]), [busy, setBusy] = useState(false), [message, setMessage] = useState('กำลังโหลดไฟล์รายงาน');
+            const fileInput = useRef(null), uploadIds = useRef(new WeakMap());
+            const load = async () => {
+                try {
+                    const rows = await DB.request({ action: 'list', table: 'PHEOCFiles', reportDate });
+                    setFiles(rows.filter(file => file.group === group));
+                    setMessage(rows.some(file => file.group === group) ? 'ไฟล์ส่งรายงานของวันนี้' : 'ยังไม่มีไฟล์ส่งรายงานสำหรับวันนี้');
+                } catch (e) {
+                    setFiles([]);
+                    setMessage(e.message === 'UNKNOWN_TABLE' ? 'ต้องอัปเดต Code.gs ใน Apps Script และรัน setupSystem() ก่อนใช้งาน' : e.message);
+                }
+            };
+            useEffect(() => { setFiles([]); load(); }, [group, reportDate]);
+            const upload = async () => {
+                const selected = Array.from(fileInput.current?.files || []);
+                if (!selected.length) { setMessage('กรุณาเลือกไฟล์รายงาน'); return; }
+                if (selected.length > 5) { setMessage('เลือกได้ครั้งละไม่เกิน 5 ไฟล์'); return; }
+                setBusy(true);
+                try {
+                    for (const file of selected) {
+                        if (!file.size || file.size > 2 * 1024 * 1024) throw new Error('ไฟล์ต้องมีขนาดไม่เกิน 2 MB ต่อไฟล์');
+                        if (!file.name || file.name.length > 180 || !['application/pdf','text/csv','text/plain','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','image/jpeg','image/png'].includes(file.type)) throw new Error('รองรับ PDF, Word, Excel, CSV, TXT, JPG และ PNG');
+                        if (!uploadIds.current.has(file)) uploadIds.current.set(file, 'pheoc_' + crypto.randomUUID());
+                        const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ')); reader.readAsDataURL(file); });
+                        await DB.request({ action: 'uploadPheocFile', id: uploadIds.current.get(file), group, reportDate, fileName: file.name, mimeType: file.type, base64 });
+                    }
+                    if (fileInput.current) fileInput.current.value = '';
+                    await load();
+                    showToast('ส่งไฟล์รายงานลง Google Drive แล้ว');
+                } catch (e) { setMessage('อัปโหลดไม่สำเร็จ: ' + e.message); } finally { setBusy(false); }
+            };
+            const download = async file => {
+                setBusy(true);
+                try {
+                    const data = await DB.request({ action: 'getPheocFile', id: file.id });
+                    const bytes = Uint8Array.from(atob(data.base64), c => c.charCodeAt(0));
+                    const url = URL.createObjectURL(new Blob([bytes], { type: data.mimeType }));
+                    const a = document.createElement('a'); a.href = url; a.download = data.fileName; a.click(); URL.revokeObjectURL(url);
+                } catch (e) { setMessage('ดาวน์โหลดไม่สำเร็จ: ' + e.message); } finally { setBusy(false); }
+            };
+            return <section className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                <p className="text-sm">ส่งได้สูงสุด 5 ไฟล์ต่อครั้ง รองรับ PDF, Word, Excel, CSV, TXT, JPG, PNG ขนาดไม่เกิน 2 MB ต่อไฟล์</p>
+                <p className="text-xs text-amber-800">ระบบเปิดโดยไม่ต้องล็อกอิน ผู้เข้าถึงเว็บอาจดาวน์โหลดไฟล์ที่ส่งได้ กรุณาอย่าแนบข้อมูลผู้ป่วยหรือเอกสารลับ</p>
+                <input ref={fileInput} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png" disabled={busy} aria-label={'เลือกไฟล์รายงาน ' + group} className="block w-full" />
+                <button type="button" disabled={busy} onClick={upload} className="bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50">{busy ? 'กำลังดำเนินการ…' : 'ส่งไฟล์รายวันเข้า Drive'}</button>
+                <p role="status" className="text-sm">{message}</p>
+                {files.length > 0 && <ul className="space-y-2">{files.map(file => <li key={file.id} className="bg-white rounded border p-2 flex items-center justify-between gap-3 text-sm"><span className="break-all">{file.fileName} <small className="text-slate-500">({(Number(file.sizeBytes) / 1024).toFixed(0)} KB)</small></span><button type="button" disabled={busy} onClick={() => download(file)} className="text-blue-700 underline shrink-0">ดาวน์โหลด</button></li>)}</ul>}
+            </section>;
         }
 
         function IncidentView({ showToast }) {

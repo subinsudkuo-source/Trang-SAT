@@ -6,12 +6,12 @@
 ## ติดตั้ง Apps Script ในชีตเดิม
 1. เปิด db ต้นฉบับใน Google Sheets หากยังเป็น Excel ให้แปลงเป็น Google Sheets ก่อน
 2. เปิด ส่วนขยาย → Apps Script วาง apps-script/Code.gs ทั้งหมดใน Code.gs
-3. รัน setupSystem() จากตัวแก้ไข และอนุญาตการเข้าถึงชีตตามคำขอ Google
-4. ฟังก์ชันบันทึก ID ชีตนี้โดยอัตโนมัติ เพิ่ม Districts (10 อำเภอ), DailyReports, PHEOCReports, Incidents และ SupportRequests ไม่ลบ ชีต1 ไม่ลบข้อมูลเดิม รันซ้ำไม่เพิ่มอำเภอซ้ำ หากตารางชื่อเดียวกันมีหัวคอลัมน์ต่างกัน จะหยุดแจ้งข้อผิดพลาด
+3. รัน setupSystem() จากตัวแก้ไข และอนุญาตการเข้าถึงชีต/Drive ตามคำขอ Google
+4. ฟังก์ชันบันทึก ID ชีตนี้โดยอัตโนมัติ เพิ่ม Districts (10 อำเภอ), DailyReports, PHEOCReports, PHEOCFiles, Photos, Incidents และ SupportRequests ไม่ลบ ชีต1 ไม่ลบข้อมูลเดิม รันซ้ำไม่เพิ่มอำเภอซ้ำ หากตารางชื่อเดียวกันมีหัวคอลัมน์ต่างกัน จะหยุดแจ้งข้อผิดพลาด
 5. Project Settings → Script Properties: คัดลอกค่า API_TOKEN ไปไว้ฝั่ง server เท่านั้น ไม่วางใน app.jsx, HTML หรือ GitHub
 6. Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone → Deploy คัดลอก URL ลงท้าย /exec
    API นี้ตรวจ token ทุกคำขอที่อ่าน/เขียนข้อมูล หากนโยบายหน่วยงานไม่อนุญาต Anyone ต้องใช้การเชื่อมผ่าน Google OAuth เพิ่มเติม ไม่ใช้ขั้นตอนนี้
-7. เมื่อต้องแก้โค้ดหลังเผยแพร่ เลือก Manage deployments → Edit → New version → Deploy
+7. เมื่อต้องแก้โค้ดหลังเผยแพร่ เลือก Manage deployments → Edit → New version → Deploy ทุกครั้ง รวมถึงหลังเพิ่ม PHEOCFiles
 
 ## GitHub / Vercel
 อัปโหลดทุกไฟล์ในโฟลเดอร์นี้เข้า repository ใหม่ (แนะนำ private) แล้ว import repository เข้า Vercel
@@ -21,7 +21,7 @@ Framework Preset: Other; ไม่ต้องตั้ง build command; root d
 - APPS_SCRIPT_TOKEN: API_TOKEN จาก Script Properties
 จากนั้น deploy หรือ redeploy ระบบจะโหลดฐานข้อมูลโดยไม่ถาม username/password
 คำเตือน: เมื่อเปิดเว็บสาธารณะ ผู้ที่มี URL สามารถอ่านและแก้ข้อมูลในชีต รวมถึงอัปโหลดภาพได้ อย่าใช้กับข้อมูลส่วนบุคคลหรือข้อมูลที่ต้องจำกัดสิทธิ
-API_TOKEN ยังเก็บฝั่ง server และไม่ส่งให้ browser แต่ API ของเว็บเปิดให้ผู้เข้าชมเรียกใช้งานได้
+API_TOKEN ยังเก็บฝั่ง server และไม่ส่งให้ browser แต่ API ของเว็บเปิดให้ผู้เข้าชมเรียกใช้งานได้ ผู้ที่มี URL สามารถอ่าน/ดาวน์โหลดไฟล์ PHEOC และอัปโหลดไฟล์ได้ ห้ามอัปโหลดข้อมูลส่วนบุคคลหรือเอกสารลับ
 
 ## ทดสอบหลังติดตั้ง
 - เข้าแอป กดเข้าสู่ฐานข้อมูล: ตารางที่ว่างจะได้แถวเริ่มต้นสำหรับ 10 อำเภอ ไม่มีการสร้างรายงานจำลองในชีต
@@ -55,4 +55,9 @@ body: {"action":"upsert","table":"DailyReports","record":{"reportDate":"2026-10-
 API getPhoto ส่งภาพเมื่อ fileId อยู่ใน Photos และไฟล์อยู่ในโฟลเดอร์ปลายทาง เนื่องจากเว็บไม่ใช้ล็อกอิน ผู้เข้าชมเว็บอาจอ่านภาพที่มีรายการใน Photos ได้
 ไม่เปิดภาพเป็นสาธารณะ ไม่เปลี่ยนสิทธิแชร์ของโฟลเดอร์ ผู้ใช้ปุ่มเปิด Drive ต้องมีสิทธิ Drive ของไฟล์นั้น ส่วนดูภาพในแอปใช้สิทธิผ่าน API
 ยังใช้บัญชีร่วมตามระบบเดิม ไม่มีการจำกัดสิทธิภาพตามอำเภอรายบุคคล
+
+## ส่งไฟล์รายวันกลุ่มภารกิจ PHEOC
+หลังแก้ apps-script/Code.gs ให้เปิด Apps Script ของชีตเดิม รัน setupSystem() เพื่อสร้าง PHEOCFiles แล้วเลือก Deploy → Manage deployments → Edit → New version → Deploy
+ในหน้าเว็บเปิด “กลุ่มภารกิจ PHEOC” เลือกวันที่ แล้วเลือกไฟล์ในกลุ่ม ระบบบันทึกไฟล์ลงโฟลเดอร์ย่อยแยกตามชื่อกลุ่มใต้โฟลเดอร์ Trang SAT และบันทึกข้อมูลอ้างอิงลงชีต PHEOCFiles สามารถดาวน์โหลดไฟล์กลับจากหน้าเว็บได้
+รองรับ PDF, Word, Excel, CSV, TXT, JPG และ PNG ขนาดไม่เกิน 2 MB ต่อไฟล์ เลือกได้สูงสุด 5 ไฟล์ต่อครั้ง ชื่อไฟล์เติมวันที่รายงานไว้ด้านหน้า
 ถ้ากดอัปโหลดซ้ำหลัง request timeout จะใช้ upload ID เดิม ไม่เพิ่มไฟล์/แถวซ้ำ; หากบันทึก metadata ไม่สำเร็จ ไฟล์ใหม่จะถูกส่งไปถังขยะเพื่อไม่ทิ้งไฟล์ค้าง
