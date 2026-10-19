@@ -540,21 +540,16 @@ function App() {
         function getAffectedPopulationTotals(report) {
             const rows = report?.floodReport?.population || [];
             const hasValue = value => value !== '' && value !== null && value !== undefined && Number.isFinite(Number(value));
-            const totals = rows.reduce((totals, row) => {
-                const count = Number(row.count);
-                if (!Number.isFinite(count) || count <= 0) return totals;
-                if (String(row.type || '').includes('เสียชีวิต')) totals.deaths += count;
-                else if (String(row.type || '').includes('บาดเจ็บ')) totals.injuries += count;
-                return totals;
-            }, { deaths: 0, injuries: 0 });
-            totals.deathsReported = rows.some(row => String(row.type || '').includes('เสียชีวิต') && hasValue(row.count));
-            totals.injuriesReported = rows.some(row => String(row.type || '').includes('บาดเจ็บ') && hasValue(row.count));
+            const sumType = type => {
+                const matching = rows.filter(row => String(row.type || '').includes(type) && hasValue(row.count));
+                return { reported: matching.length > 0, value: matching.reduce((sum,row)=>sum+Math.max(0,Number(row.count)),0) };
+            };
+            const deaths=sumType('เสียชีวิต'), injuries=sumType('บาดเจ็บ'), missing=sumType('สูญหาย');
+            const totals = { deaths:deaths.value, deathsReported:deaths.reported, injuries:injuries.value, injuriesReported:injuries.reported, missing:missing.value, missingReported:missing.reported };
             const areaRows = report?.floodReport?.areas || [];
-            totals.affectedReported = areaRows.some(row => hasValue(row.people));
-            totals.affected = areaRows.reduce((sum, row) => {
-                const count = Number(row.people);
-                return Number.isFinite(count) && count > 0 ? sum + count : sum;
-            }, 0);
+            const affected=areaRows.filter(row=>hasValue(row.people));
+            totals.affectedReported = affected.length > 0;
+            totals.affected = affected.reduce((sum,row)=>sum+Math.max(0,Number(row.people)),0);
             return totals;
         }
 
@@ -569,6 +564,13 @@ function App() {
             const [mapError, setMapError] = useState(false);
             const [attribution, setAttribution] = useState('');
             const [casualtyReports, setCasualtyReports] = useState(districtReports);
+            const getDistrictReport = districtId => casualtyReports.find(r=>r.districtId===districtId) || districtReports.find(r=>r.districtId===districtId);
+            const districtImpactRows = districts.map(district => ({district,report:getDistrictReport(district.id),...getAffectedPopulationTotals(getDistrictReport(district.id))}));
+            const districtImpactTotals = ['deaths','missing','affected'].reduce((result,key)=>{
+                const reportedRows=districtImpactRows.filter(row=>row[`${key}Reported`]);
+                result[key]={value:reportedRows.reduce((sum,row)=>sum+row[key],0),districts:reportedRows.length};
+                return result;
+            },{});
 
             useEffect(() => {
                 let active = true;
@@ -579,7 +581,7 @@ function App() {
                         const latestByDistrict = new Map();
                         rows.filter(row => row?.districtId && (
                             (Array.isArray(row?.floodReport?.population) && row.floodReport.population.some(item =>
-                                (String(item.type || '').includes('เสียชีวิต') || String(item.type || '').includes('บาดเจ็บ')) && item.count !== '' && item.count != null
+                                (String(item.type || '').includes('เสียชีวิต') || String(item.type || '').includes('สูญหาย') || String(item.type || '').includes('บาดเจ็บ')) && item.count !== '' && item.count != null
                             )) ||
                             (Array.isArray(row?.floodReport?.areas) && row.floodReport.areas.some(item => item.people !== '' && item.people != null))
                         )).forEach(row => {
@@ -797,18 +799,18 @@ function App() {
                                                 {mapFeatures.map((feature) => {
                                                     const { districtId, thaiName, labelPoint } = feature.properties;
                                                     const [x, y] = project(labelPoint[0], labelPoint[1]);
-                                                    const report = casualtyReports.find(r => r.districtId === districtId) || districtReports.find(r => r.districtId === districtId);
-                                                    const { deaths, injuries, affected } = getAffectedPopulationTotals(report);
-                                                    const hasPopulationData = deaths > 0 || injuries > 0 || affected > 0;
+                                                    const report = getDistrictReport(districtId);
+                                                    const { deaths, missing, affected } = getAffectedPopulationTotals(report);
+                                                    const hasPopulationData = deaths > 0 || missing > 0 || affected > 0;
                                                     return (
                                                         <g key={'l-' + districtId} textAnchor="middle">
                                                             <text x={x} y={y} className="map-label" dominantBaseline="middle" fontSize="14" fontWeight="700" fill="#17324d" paintOrder="stroke" stroke="#ffffff" strokeWidth="3" strokeLinejoin="round">
                                                                 {thaiName}
                                                             </text>
-                                                            {hasPopulationData && <g aria-label={`อำเภอ${thaiName} เสียชีวิต ${deaths} ราย บาดเจ็บ ${injuries} ราย ประสบภัย ${affected} คน`}>
-                                                                <title>{`อำเภอ${thaiName} • เสียชีวิต ${deaths.toLocaleString('th-TH')} ราย • บาดเจ็บ ${injuries.toLocaleString('th-TH')} ราย • ประชาชนประสบภัย ${affected.toLocaleString('th-TH')} คน (ยอดสะสม)`}</title>
+                                                            {hasPopulationData && <g aria-label={`อำเภอ${thaiName} เสียชีวิต ${deaths} ราย สูญหาย ${missing} ราย ประสบภัย ${affected} คน`}>
+                                                                <title>{`อำเภอ${thaiName} • เสียชีวิต ${deaths.toLocaleString('th-TH')} ราย • สูญหาย ${missing.toLocaleString('th-TH')} ราย • ประชาชนประสบภัย ${affected.toLocaleString('th-TH')} คน (ยอดสะสม)`}</title>
                                                                 <text x={x - 35} y={y + 27} fontSize="10" fontWeight="800" fill="#7f1d1d" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">🪦 {deaths.toLocaleString('th-TH')}</text>
-                                                                <text x={x} y={y + 27} fontSize="10" fontWeight="800" fill="#1e3a8a" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">🩹 {injuries.toLocaleString('th-TH')}</text>
+                                                                <text x={x} y={y + 27} fontSize="10" fontWeight="800" fill="#6d28d9" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">🔎 {missing.toLocaleString('th-TH')}</text>
                                                                 <text x={x + 38} y={y + 27} fontSize="10" fontWeight="800" fill="#14532d" stroke="#ffffff" strokeWidth="2.5" strokeLinejoin="round" paintOrder="stroke">👥 {affected.toLocaleString('th-TH')}</text>
                                                             </g>}
                                                         </g>
@@ -817,7 +819,7 @@ function App() {
                                             </g>
                                         </svg>
                                     </div>
-                                    <p className="text-sm text-slate-600">แผนที่แสดงขอบเขตการปกครอง สีใช้แยกอำเภอ ไม่ใช่พื้นที่น้ำท่วมหรือระดับความเสี่ยง • เมื่อมีข้อมูล จะแสดง 🪦 ผู้เสียชีวิต 🩹 ผู้บาดเจ็บ และ 👥 ประชาชนประสบภัย (ยอดสะสม) ใต้ชื่ออำเภอ</p>
+                                    <p className="text-sm text-slate-600">แผนที่แสดงขอบเขตการปกครอง สีใช้แยกอำเภอ ไม่ใช่พื้นที่น้ำท่วมหรือระดับความเสี่ยง • เมื่อมีข้อมูล จะแสดงยอดผู้เสียชีวิต ผู้สูญหาย และประชาชนประสบภัยสะสมใต้ชื่ออำเภอ</p>
                                     {attribution && <p className="text-sm text-slate-500">แหล่งข้อมูล: <a href="https://www.geoboundaries.org/api/current/gbOpen/THA/ADM2/" target="_blank" rel="noopener noreferrer" className="underline">{attribution}</a></p>}
                                 </div>
                             )}
@@ -850,21 +852,14 @@ function App() {
                                 })}
                             </div>
 
-                            <div className="bg-[#EDF4F8] p-4 rounded-xl border border-slate-200 space-y-2 mt-4">
-                                <h4 className="font-bold text-slate-800 text-sm">
-                                    {selectedDistObj ? `อำเภอ${selectedDistObj.thai} (${selectedDistObj.english})` : 'จังหวัดตรัง'}
-                                </h4>
-                                {selectedDistObj && (
-                                    <div className="space-y-1 text-xs text-slate-600">
-                                        <p><strong>สถานะ:</strong> <span className={`font-bold ${selectedDistObj.status === 'เสี่ยงสูง' ? 'text-red-600' : selectedDistObj.status === 'เฝ้าระวัง' ? 'text-amber-600' : 'text-emerald-600'}`}>{selectedDistObj.status}</span></p>
-                                        <p><strong>ฝนสะสม:</strong> {selectedDistObj.rain} มม.</p>
-                                        <p><strong>ระดับน้ำ:</strong> {selectedDistObj.water}</p>
-                                        <p><strong>แนวโน้ม:</strong> {selectedDistObj.trend}</p>
-                                    </div>
-                                )}
-                            </div>
                         </div>
                     </div>
+                    <section className="glass-card p-5 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"><div><h3 className="font-bold text-slate-800">ยอดผู้เสียชีวิต ผู้สูญหาย และประชาชนประสบภัย แยกอำเภอ</h3><p className="text-xs text-slate-500 mt-1">แสดงข้อมูลล่าสุดที่แต่ละอำเภอบันทึกไว้ • เลือกอำเภอบนแผนที่หรือในรายชื่อเพื่อไฮไลต์แถว</p></div><span className="text-[11px] text-slate-500">{districtImpactRows.filter(row=>row.deathsReported||row.missingReported||row.affectedReported).length} / {districts.length} อำเภอมีข้อมูลตัวเลข</span></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">{[['deaths','ผู้เสียชีวิต','ราย','bg-red-50 text-red-700 border-red-200'],['missing','ผู้สูญหาย','ราย','bg-violet-50 text-violet-700 border-violet-200'],['affected','ประชาชนประสบภัย','คน','bg-emerald-50 text-emerald-700 border-emerald-200']].map(([key,label,unit,style])=><div key={key} className={`rounded-xl border p-3 ${style}`}><p className="text-xs">ยอดรวม{label}</p><p className="text-xl font-bold mt-1">{districtImpactTotals[key].districts?districtImpactTotals[key].value.toLocaleString('th-TH'):'—'} <span className="text-xs font-medium">{unit}</span></p><p className="text-[11px] opacity-80">มีข้อมูล {districtImpactTotals[key].districts} อำเภอ</p></div>)}</div>
+                        <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm"><thead><tr className="bg-slate-100 text-slate-700 text-left"><th className="px-3 py-2 rounded-l-lg">อำเภอ</th><th className="px-3 py-2 text-right">ผู้เสียชีวิต (ราย)</th><th className="px-3 py-2 text-right">ผู้สูญหาย (ราย)</th><th className="px-3 py-2 text-right rounded-r-lg">ประชาชนประสบภัย (คน)</th></tr></thead><tbody>{districtImpactRows.map(row=><tr key={row.district.id} onClick={()=>setSelectedDistId(row.district.id)} className={`border-b border-slate-100 cursor-pointer hover:bg-blue-50 ${row.district.id===selectedDistId?'bg-blue-50/70 font-semibold':''}`}><th scope="row" className="px-3 py-2 text-left whitespace-nowrap">อำเภอ{row.district.thai}</th><td className={`px-3 py-2 text-right tabular-nums ${row.deathsReported?'text-red-700':'text-slate-400'}`}>{row.deathsReported?row.deaths.toLocaleString('th-TH'):'—'}</td><td className={`px-3 py-2 text-right tabular-nums ${row.missingReported?'text-violet-700':'text-slate-400'}`}>{row.missingReported?row.missing.toLocaleString('th-TH'):'—'}</td><td className={`px-3 py-2 text-right tabular-nums ${row.affectedReported?'text-emerald-700':'text-slate-400'}`}>{row.affectedReported?row.affected.toLocaleString('th-TH'):'—'}</td></tr>)}<tr className="bg-slate-50 font-bold"><th scope="row" className="px-3 py-2 text-left rounded-l-lg">ยอดรวมที่มีข้อมูล</th><td className="px-3 py-2 text-right text-red-700 tabular-nums">{districtImpactTotals.deaths.districts?districtImpactTotals.deaths.value.toLocaleString('th-TH'):'—'}</td><td className="px-3 py-2 text-right text-violet-700 tabular-nums">{districtImpactTotals.missing.districts?districtImpactTotals.missing.value.toLocaleString('th-TH'):'—'}</td><td className="px-3 py-2 text-right text-emerald-700 tabular-nums rounded-r-lg">{districtImpactTotals.affected.districts?districtImpactTotals.affected.value.toLocaleString('th-TH'):'—'}</td></tr></tbody></table></div>
+                        <p className="text-[11px] text-slate-500">ขีด — หมายถึงยังไม่มีตัวเลขในรายงาน ไม่ใช่ศูนย์ • ยอดรวมเป็นผลรวมของอำเภอที่มีการระบุตัวเลขไว้</p>
+                    </section>
                 </div>
             );
         }
