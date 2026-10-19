@@ -1,8 +1,8 @@
 /** TRANG SAT — bound Google Sheets database. Run setupSystem from the sheet editor. */
-const PHOTO_FOLDER_ID = '1TMxlpDlhdhxxilLHaH85qcYmGT-zR3jH';
+const PHOTO_FOLDER_ID = '1TMxlpDlhdhxxilLHaH85qcYmGT-zR3jH'; const PHEOC_FOLDER_ID = '1gdsmNAPtE6dkZo_H5Gl5srTMEDReoB4D';
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_PHEOC_FILE_BYTES = 2 * 1024 * 1024;
-const PHEOC_FILE_TYPES = ['application/pdf','text/csv','text/plain','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','image/jpeg','image/png'];
+const PHEOC_FILE_TYPES = ['application/pdf','image/jpeg','image/png'];
 const TABLES = {
   Photos: ['id','reportDate','districtId','districtName','fileId','fileName','mimeType','sizeBytes','caption','driveUrl','uploadedAt'],
   PHEOCFiles: ['id','reportDate','group','fileId','fileName','mimeType','sizeBytes','driveUrl','uploadedAt'],
@@ -179,14 +179,14 @@ function uploadPheocFile_(input) {
  if(typeof input.fileName!=='string'||!input.fileName.trim()||input.fileName.length>180||/[\\/\u0000-\u001f]/.test(input.fileName))throw new Error('INVALID_FILE_NAME');
  if(typeof input.base64!=='string'||input.base64.length>Math.ceil(MAX_PHEOC_FILE_BYTES/3)*4||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(input.base64))throw new Error('INVALID_FILE_DATA');
  const bytes=Utilities.base64Decode(input.base64);
- if(!bytes.length||bytes.length>MAX_PHEOC_FILE_BYTES)throw new Error('FILE_TOO_LARGE_OR_EMPTY');
+ const u=i=>(bytes[i]+256)%256;const signature=input.mimeType==='application/pdf'?String.fromCharCode(...bytes.slice(0,5))==='%PDF-':input.mimeType==='image/jpeg'?u(0)===255&&u(1)===216&&u(2)===255:[137,80,78,71,13,10,26,10].every((n,i)=>u(i)===n);if(!bytes.length||bytes.length>MAX_PHEOC_FILE_BYTES||!signature)throw new Error('FILE_TOO_LARGE_OR_INVALID');
  const lock=LockService.getScriptLock();lock.waitLock(20000);
  let file;
  try {
   const sh=sheet_('PHEOCFiles');checkHeaders_(sh,'PHEOCFiles');
   const old=readRows_('PHEOCFiles').find(r=>r.id===input.id);
   if(old){if(old.group!==group||old.reportDate!==date)throw new Error('UPLOAD_ID_CONFLICT');return old;}
-  const root=DriveApp.getFolderById(PHOTO_FOLDER_ID);
+  const root=DriveApp.getFolderById(PHEOC_FOLDER_ID);
   const folderName=group.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').slice(0,100);
   const matches=root.getFoldersByName(folderName);
   const folder=matches.hasNext()?matches.next():root.createFolder(folderName);
@@ -203,10 +203,10 @@ function getPheocFile_(id) {
  const row=readRows_('PHEOCFiles').find(r=>r.id===id);if(!row)throw new Error('FILE_NOT_FOUND');
  const file=DriveApp.getFileById(row.fileId);if(file.isTrashed())throw new Error('FILE_NOT_FOUND');
  const folderName=String(row.group||'').replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').slice(0,100);
- const folders=DriveApp.getFolderById(PHOTO_FOLDER_ID).getFoldersByName(folderName);
- if(!folders.hasNext())throw new Error('FILE_FOLDER_MISMATCH');
- const expectedFolderId=folders.next().getId(),parents=file.getParents();let belongs=false;
- while(parents.hasNext()){if(parents.next().getId()===expectedFolderId)belongs=true;}
+ const folders=DriveApp.getFolderById(PHEOC_FOLDER_ID).getFoldersByName(folderName),legacyFolders=DriveApp.getFolderById(PHOTO_FOLDER_ID).getFoldersByName(folderName);
+ if(!folders.hasNext()&&!legacyFolders.hasNext())throw new Error('FILE_FOLDER_MISMATCH');
+ const expectedFolderIds=[];while(folders.hasNext())expectedFolderIds.push(folders.next().getId());while(legacyFolders.hasNext())expectedFolderIds.push(legacyFolders.next().getId());const parents=file.getParents();let belongs=false;
+ while(parents.hasNext()){if(expectedFolderIds.includes(parents.next().getId()))belongs=true;}
  if(!belongs)throw new Error('FILE_FOLDER_MISMATCH');
  if(file.getSize()>MAX_PHEOC_FILE_BYTES)throw new Error('FILE_TOO_LARGE');
  return {fileName:row.fileName,mimeType:row.mimeType,base64:Utilities.base64Encode(file.getBlob().getBytes())};
