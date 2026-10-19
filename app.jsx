@@ -1033,14 +1033,10 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
  </div>;
 }
 
-        const PHEOC_UPLOAD_GROUPS = [
-            'ทีมปฏิบัติการฉุกเฉินทางการแพทย์ (MERT / EMT)',
-            'กลุ่มอนามัยสิ่งแวดล้อมและควบคุมโรค',
-            'กลุ่มสนับสนุนทรัพยากรและเวชภัณฑ์'
-        ];
+        const PHEOC_UPLOAD_GROUPS = ['กลุ่มภารกิจวางแผน (Planning Team)','กลุ่มภารกิจจิตตระหนักรู้สถานการณ์ (SAT)','กลุ่มภารกิจการเฝ้าระวังเชิงรุก (Active Surveillance)','กลุ่มภารกิจการจัดการและดูแลรักษาผู้ป่วย (Case Management)','กลุ่มภารกิจสื่อสารความเสี่ยง (Risk Communication)','กลุ่มภารกิจวิศวกรรมการแพทย์ (MSERT)','กลุ่มภารกิจปฏิบัติการช่วยเหลือเยียวยาจิตใจประชาชน (MCATT)','กลุ่มภารกิจปฏิบัติการฉุกเฉินทางการแพทย์ (MERT / mini MERT)','กลุ่มภารกิจบริหารจัดการและการบริการวัคซีน (Vaccine support team)','กลุ่มภารกิจปฏิบัติการด้านอนามัยสิ่งแวดล้อม (SEPRT)','กลุ่มภารกิจสำรองวัสดุ เวชภัณฑ์ และกำลังบำรุง (Logistics and Stockpiling)','กลุ่มภารกิจประสานงานและเลขานุการ (Liaison)','กลุ่มภารกิจการเงินและงบประมาณ/ธุรการ (Finance/Administration)','กลุ่มภารกิจด้านเทคโนโลยีดิจิทัล (Digital support)','กลุ่มภารกิจจัดสรรกำลังคนในภาวะฉุกเฉิน (Emergency Personnel Staffing)','กลุ่มภารกิจการจัดการศูนย์ปฏิบัติการฉุกเฉิน (EOC Management)'];
         function PheocView({ reports, setReports, showToast }) {
             const [reportDate, setReportDate] = useState(new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10));
-            const groups = [...new Set([...(reports || []).map(p => p.group).filter(Boolean), ...PHEOC_UPLOAD_GROUPS])];
+            const legacyGroups = [...new Set((reports || []).map(p => p.group).filter(Boolean))].filter(group => !PHEOC_UPLOAD_GROUPS.includes(group)); const groups = [...PHEOC_UPLOAD_GROUPS, ...legacyGroups];
             return (
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
@@ -1060,11 +1056,11 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
 
                     {!reports?.length && <p className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">ยังไม่มีข้อมูลความพร้อมในชีต แต่สามารถส่งไฟล์รายวันของแต่ละกลุ่มได้</p>}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {groups.map(group => {
+                        {groups.map((group, groupIndex) => {
                             const p = (reports || []).find(item => item.group === group);
                             return <div key={group} className="glass-card p-5 space-y-4">
                                 <div className="flex justify-between items-start gap-3">
-                                    <h4 className="font-bold text-slate-800 text-base">{group}</h4>
+                                    <h4 className="font-bold text-slate-800 text-base"><span className="inline-flex items-center justify-center w-7 h-7 mr-2 rounded-full bg-blue-100 text-blue-800 text-sm align-middle">{groupIndex < PHEOC_UPLOAD_GROUPS.length ? groupIndex + 1 : '•'}</span>{group}</h4>
                                     {p?.readiness && <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">{p.readiness}</span>}
                                 </div>
                                 {p && <div className="space-y-2 text-xs text-slate-600">
