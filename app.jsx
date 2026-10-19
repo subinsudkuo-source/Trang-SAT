@@ -212,7 +212,7 @@ function App() {
                                 { id: 'map', label: 'แผนที่ geoBoundaries & Google View', icon: 'ph-map-trifold' },
                                 { id: 'dashboard', label: 'Dashboard ภาพรวม', icon: 'ph-squares-four' },
                                 { id: 'district', label: 'รายงานประจำวันอำเภอ', icon: 'ph-clipboard-text' },
-                                { id: 'pheoc', label: 'กลุ่มภารกิจ PHEOC', icon: 'ph-users-three' },
+                                { id: 'pheoc', label: 'รายงานกลุ่มภารกิจ PHEOC', icon: 'ph-users-three' },
                                 { id: 'incident', label: 'แจ้งเหตุเร่งด่วน', icon: 'ph-warning-octagon' },
                                 { id: 'support', label: 'คำขอสนับสนุน', icon: 'ph-hand-fist' },
                                 { id: 'automation', label: 'ศูนย์ Automation', icon: 'ph-gear-six' }
