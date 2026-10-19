@@ -921,7 +921,7 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
  const district=districts.find(d=>d.id===selectedDistId);
  useEffect(()=>{
   let active=true;setLoading(true);setLoaded(false);setError('');setForm(blankFloodReport(reportDate));setBase({status:'ปกติ',rain:'',waterLevel:'',trend:'',reporter:'',submitted:false});
-  DB.request({action:'list',table:'DailyReports',reportDate,districtId:selectedDistId}).then(rows=>{if(!active)return;const row=unpackFloodReport(rows[0]);if(row){setBase({...row,rain:row.rain??''});setForm({...blankFloodReport(reportDate),...(row.floodReport||{}),summary:row.notes||''});}setLoaded(true);}).catch(e=>{if(active)setError('โหลดรายงานไม่สำเร็จ: '+e.message);}).finally(()=>{if(active)setLoading(false);});
+  DB.request({action:'list',table:'DailyReports',reportDate,districtId:selectedDistId}).then(rows=>{if(!active)return;const row=unpackFloodReport(rows[0]);if(row){const payload=row.floodReport||{};const populationTypes=['เสียชีวิต','ได้รับบาดเจ็บ','สูญหาย'];setBase({...row,rain:row.rain??''});setForm({...blankFloodReport(reportDate),...payload,population:populationTypes.map(type=>(payload.population||[]).find(person=>person.type===type)||{type}),vulnerable:payload.vulnerable||[{}],summary:row.notes||''});}setLoaded(true);}).catch(e=>{if(active)setError('โหลดรายงานไม่สำเร็จ: '+e.message);}).finally(()=>{if(active)setLoading(false);});
   return ()=>{active=false;};
  },[selectedDistId,reportDate,reload]);
  const change=(key,value)=>setForm(previous=>({...previous,[key]:value}));
