@@ -901,7 +901,7 @@ function App() {
                                 ศูนย์ปฏิบัติการฉุกเฉินด้านการแพทย์และสาธารณสุข (PHEOC) จ.ตรัง
                             </span>
                             <h2 className="text-2xl md:text-3xl font-bold mt-2">Dashboard ภาพรวมอุทกภัยจังหวัดตรัง</h2>
-                            <p className="text-slate-300 text-xs md:text-sm mt-1">ติดตามสถานการณ์น้ำท่วม ข้อมูลกรมอุตุฯ (TMD) และความพร้อมของ 10 อำเภอแบบเรียลไทม์</p>
+                            <p className="text-slate-300 text-xs md:text-sm mt-1">ติดตามสถานการณ์น้ำท่วมและความพร้อมของ 10 อำเภอแบบเรียลไทม์</p>
                         </div>
                         <div className="text-right hidden sm:block">
                             <p className="text-xs text-slate-300">อัปเดตข้อมูลล่าสุด</p>
@@ -955,45 +955,7 @@ function App() {
                         </div>
                     </div>
 
-                    <div className="glass-card p-6 bg-gradient-to-r from-blueLight/60 to-white">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-bluePrimary text-white flex items-center justify-center text-xl shadow">
-                                    <i className="ph ph-cloud-sun"></i>
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-slate-800">ข้อมูลกรมอุตุนิยมวิทยา (TMD) — จังหวัดตรัง</h3>
-                                    <p className="text-xs text-slate-500">เชื่อมต่ออัตโนมัติผ่าน API กรมอุตุนิยมวิทยา (อัปเดตทุก 1 ชั่วโมง)</p>
-                                </div>
-                            </div>
-                            <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-semibold flex items-center gap-1">
-                                <i className="ph-fill ph-check-circle"></i> เชื่อมต่อสำเร็จ (Live API)
-                            </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <p className="text-xs text-slate-500">สภาพอากาศภาพรวม</p>
-                                <p className="text-lg font-bold text-slate-800 mt-1">มีฝนฟ้าคะนอง 60% ของพื้นที่</p>
-                                <p className="text-[11px] text-slate-400 mt-1">ลมมรสุมตะวันตกเฉียงใต้กำลังแรง</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <p className="text-xs text-slate-500">ปริมาณฝนสะสม 24 ชม.</p>
-                                <p className="text-lg font-bold text-blue-600 mt-1">68.0 มม. (อ.นาโยง)</p>
-                                <p className="text-[11px] text-slate-400 mt-1">เกินเกณฑ์เฝ้าระวัง 50 มม.</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <p className="text-xs text-slate-500">ระดับน้ำแม่น้ำตรัง (สถานี X.74)</p>
-                                <p className="text-lg font-bold text-amber-600 mt-1">3.45 เมตร (วิกฤต)</p>
-                                <p className="text-[11px] text-amber-600 mt-1">แนวโน้ม: เพิ่มขึ้นต่อเนื่อง</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                                <p className="text-xs text-slate-500">คำเตือนภัยธรรมชาติ</p>
-                                <p className="text-lg font-bold text-red-600 mt-1">ประกาศฉบับที่ 3/2569</p>
-                                <p className="text-[11px] text-red-500 mt-1">ระวังน้ำป่าไหลหลาก 13-15 ต.ค.</p>
-                            </div>
-                        </div>
-                    </div>
+                    
                 </div>
             );
         }
