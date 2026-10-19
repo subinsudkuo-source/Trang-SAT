@@ -1036,7 +1036,7 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
         const PHEOC_UPLOAD_GROUPS = ['กลุ่มภารกิจวางแผน (Planning Team)','กลุ่มภารกิจจิตตระหนักรู้สถานการณ์ (SAT)','กลุ่มภารกิจการเฝ้าระวังเชิงรุก (Active Surveillance)','กลุ่มภารกิจการจัดการและดูแลรักษาผู้ป่วย (Case Management)','กลุ่มภารกิจสื่อสารความเสี่ยง (Risk Communication)','กลุ่มภารกิจวิศวกรรมการแพทย์ (MSERT)','กลุ่มภารกิจปฏิบัติการช่วยเหลือเยียวยาจิตใจประชาชน (MCATT)','กลุ่มภารกิจปฏิบัติการฉุกเฉินทางการแพทย์ (MERT / mini MERT)','กลุ่มภารกิจบริหารจัดการและการบริการวัคซีน (Vaccine support team)','กลุ่มภารกิจปฏิบัติการด้านอนามัยสิ่งแวดล้อม (SEPRT)','กลุ่มภารกิจสำรองวัสดุ เวชภัณฑ์ และกำลังบำรุง (Logistics and Stockpiling)','กลุ่มภารกิจประสานงานและเลขานุการ (Liaison)','กลุ่มภารกิจการเงินและงบประมาณ/ธุรการ (Finance/Administration)','กลุ่มภารกิจด้านเทคโนโลยีดิจิทัล (Digital support)','กลุ่มภารกิจจัดสรรกำลังคนในภาวะฉุกเฉิน (Emergency Personnel Staffing)','กลุ่มภารกิจการจัดการศูนย์ปฏิบัติการฉุกเฉิน (EOC Management)'];
         function PheocView({ reports, setReports, showToast }) {
             const [reportDate, setReportDate] = useState(new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10));
-            const legacyGroups = [...new Set((reports || []).map(p => p.group).filter(Boolean))].filter(group => !PHEOC_UPLOAD_GROUPS.includes(group)); const groups = [...PHEOC_UPLOAD_GROUPS, ...legacyGroups];
+            const [dailyReports,setDailyReports]=useState(reports||[]),[loadingReports,setLoadingReports]=useState(true),[savingGroup,setSavingGroup]=useState(''),[formMessage,setFormMessage]=useState(''); const legacyGroups=[...new Set((reports||[]).map(p=>p.group).filter(Boolean))].filter(group=>!PHEOC_UPLOAD_GROUPS.includes(group)); const groups=[...PHEOC_UPLOAD_GROUPS,...legacyGroups]; useEffect(()=>{let active=true;setLoadingReports(true);setFormMessage('');DB.request({action:'list',table:'PHEOCReports',reportDate}).then(rows=>{if(active)setDailyReports(Array.isArray(rows)?rows:[]);}).catch(error=>{if(active)setFormMessage('โหลดแบบฟอร์มไม่สำเร็จ: '+error.message);}).finally(()=>{if(active)setLoadingReports(false);});return()=>{active=false;};},[reportDate]); const updateField=(group,key,value)=>setDailyReports(current=>{const existing=current.find(item=>item.group===group)||{reportDate,group};return [...current.filter(item=>item.group!==group),{...existing,[key]:value}];}); const saveGroup=async(group,groupIndex)=>{const form=dailyReports.find(item=>item.group===group)||{};setSavingGroup(group);setFormMessage('');try{const record={id:form.id||'pheoc_'+reportDate+'_'+String(groupIndex+1).padStart(2,'0'),reportDate,group,readiness:form.readiness||'',personnel:form.personnel||'',actions:form.actions||'',issues:form.issues||'',nextPlan:form.nextPlan||''};const saved=await DB.request({action:'upsert',table:'PHEOCReports',record});setDailyReports(current=>[...current.filter(item=>item.group!==group),saved]);const today=new Date(Date.now()+7*60*60*1000).toISOString().slice(0,10);if(reportDate===today)setReports(current=>[...(current||[]).filter(item=>item.group!==group),saved]);showToast('บันทึกรายงานกลุ่ม '+group+' แล้ว');}catch(error){setFormMessage('บันทึกแบบฟอร์มไม่สำเร็จ: '+error.message);}finally{setSavingGroup('');}};
             return (
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
@@ -1045,7 +1045,7 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
                                 <i className="ph ph-users-three text-bluePrimary"></i>
                                 <span>รายงานความพร้อมกลุ่มภารกิจ PHEOC จังหวัดตรัง</span>
                             </h3>
-                            <p className="text-xs text-slate-500">เลือกวันที่ แล้วแนบไฟล์รายงานของแต่ละกลุ่ม ระบบจัดเก็บลง Google Drive แยกโฟลเดอร์ตามกลุ่ม</p>
+                            <p className="text-xs text-slate-500">กรอกและบันทึกแบบฟอร์มความพร้อมลงชีต PHEOCReports พร้อมแนบไฟล์รายวันแยกตามกลุ่มลง Google Drive ได้</p>
                         </div>
                     </div>
 
@@ -1054,10 +1054,10 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
                         <input id="pheoc-report-date" type="date" value={reportDate} onChange={e => setReportDate(e.target.value)} className="border rounded-lg p-2" />
                     </div>
 
-                    {!reports?.length && <p className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">ยังไม่มีข้อมูลความพร้อมในชีต แต่สามารถส่งไฟล์รายวันของแต่ละกลุ่มได้</p>}
+                    {loadingReports && <p role="status" className="bg-slate-50 border rounded-lg p-3 text-sm">กำลังโหลดแบบฟอร์มความพร้อมจาก Google Sheets…</p>}{formMessage && <p role="alert" className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">{formMessage}</p>}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {groups.map((group, groupIndex) => {
-                            const p = (reports || []).find(item => item.group === group);
+                            const p = dailyReports.find(item => item.group === group) || { group, reportDate, readiness: '', personnel: '', actions: '', issues: '', nextPlan: '' }; const busy = savingGroup === group;
                             return <div key={group} className="glass-card p-5 space-y-4">
                                 <div className="flex justify-between items-start gap-3">
                                     <h4 className="font-bold text-slate-800 text-base"><span className="inline-flex items-center justify-center w-7 h-7 mr-2 rounded-full bg-blue-100 text-blue-800 text-sm align-middle">{groupIndex < PHEOC_UPLOAD_GROUPS.length ? groupIndex + 1 : '•'}</span>{group}</h4>
