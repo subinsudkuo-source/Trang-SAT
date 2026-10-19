@@ -20,7 +20,7 @@ const DISTRICT_SEEDS = [
  ['d09','Ratsada','รัษฎา',99.639057,7.928633],['d10','Hat Samran','หาดสำราญ',99.585232,7.226366]
 ];
 function setupSystem() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = SpreadsheetApp.openById('1-StJglTTKmEuD_AXAsBIhI6ZWvXmSBNZfcvDIw9NTsI');
   if (!ss) throw new Error('เปิด Apps Script จากเมนูส่วนขยายของ Google Sheet ฐานข้อมูลก่อน');
   const lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
