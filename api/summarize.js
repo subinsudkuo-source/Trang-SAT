@@ -14,9 +14,12 @@ module.exports = async function handler(req, res) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: String(body.systemInstruction || 'สรุปข้อมูลสถานการณ์สาธารณสุขอย่างเป็นทางการ โดยยึดเฉพาะข้อมูลที่ให้มา ห้ามแต่งข้อเท็จจริง') }] },
         contents: [{ role: 'user', parts: [{ text: body.prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 1800 }
+        generationConfig: {
+          thinkingConfig: { thinkingLevel: 'low' },
+          maxOutputTokens: 1800
+        }
       }),
-      signal: AbortSignal.timeout(25000)
+      signal: AbortSignal.timeout(55000)
     });
     const data = await response.json();
     const text = data?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
