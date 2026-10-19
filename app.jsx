@@ -228,7 +228,7 @@ function App() {
 
                     {/* Footer */}
                     <footer className="bg-white border-t border-slate-200 py-4 mt-8">
-                        <p className="max-w-7xl mx-auto px-4 pb-3 text-sm text-slate-500">รายงานอำเภอและ PHEOC ดึงจากข้อมูลที่บันทึกในระบบ • Gemini Flash ต้องตั้งค่า GEMINI_API_KEY ใน Vercel • LINE, SMS และ Automation ยังเป็นต้นแบบ</p>
+                        <p className="max-w-7xl mx-auto px-4 pb-3 text-sm text-slate-500">รายงานอำเภอและ PHEOC ดึงจากข้อมูลที่บันทึกในระบบ</p>
                         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 gap-2">
                             <p>© 2569 สำนักงานสาธารณสุขจังหวัดตรัง — TRANG SAT Flood Monitoring System (geoBoundaries ADM2)</p>
                             <p className="flex items-center gap-2">
