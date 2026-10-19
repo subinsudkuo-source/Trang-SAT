@@ -57,6 +57,30 @@ const DB = {
    return unpackFloodReport(data);
  }
 };
+const PHOTO_URL_CACHE = new Map();
+function loadPhotoUrl(action,id){
+ const key=`${action}:${id}`;
+ if(!PHOTO_URL_CACHE.has(key)){
+  const promise=DB.request({action,id}).then(data=>{
+   const bytes=Uint8Array.from(atob(data.base64),char=>char.charCodeAt(0));
+   return URL.createObjectURL(new Blob([bytes],{type:data.mimeType}));
+  }).catch(error=>{PHOTO_URL_CACHE.delete(key);throw error;});
+  PHOTO_URL_CACHE.set(key,promise);
+ }
+ return PHOTO_URL_CACHE.get(key);
+}
+async function optimizePhoto(file){
+ if(!file.type.startsWith('image/')||!window.createImageBitmap||file.size<350*1024)return file;
+ const bitmap=await createImageBitmap(file),maxEdge=1600,scale=Math.min(1,maxEdge/bitmap.width,maxEdge/bitmap.height);
+ if(scale===1&&file.type==='image/png'){bitmap.close();return file;}
+ const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+ const context=canvas.getContext('2d');context.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
+ const type=file.type==='image/png'?'image/png':file.type==='image/webp'?'image/webp':'image/jpeg';
+ const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('บีบอัดภาพไม่สำเร็จ')),type,type==='image/png'?undefined:0.82));
+ if(blob.size>=file.size)return file;
+ const ext=type==='image/png'?'.png':type==='image/webp'?'.webp':'.jpg';
+ return new File([blob],file.name.replace(/\.[^.]+$/,ext),{type,lastModified:file.lastModified});
+}
 function DatabasePanel({onLoaded}) {
  const [message,setMessage]=useState('');
  const [busy,setBusy]=useState(true);
@@ -78,8 +102,8 @@ function DistrictPhotos({districtId,reportDate,showToast}) {
  const files=Array.from(fileInput.current.files||[]);if(!files.length){setMessage('กรุณาเลือกภาพ');return;}
  if(files.length>5){setMessage('อัปโหลดได้ครั้งละไม่เกิน 5 ภาพ');return;}
  setBusy(true);
- try{for(const file of files){
- if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>2*1024*1024||!file.size)throw new Error('รองรับ JPG / PNG / WEBP ขนาดไม่เกิน 2 MB ต่อภาพ');
+ try{for(const original of files){
+ const file=await optimizePhoto(original);if(!['image/jpeg','image/png','image/webp'].includes(original.type)||!original.size||original.size>12*1024*1024||file.size>2*1024*1024)throw new Error('รองรับ JPG / PNG / WEBP และขนาดหลังปรับไม่เกิน 2 MB ต่อภาพ');
  if(!uploadIds.current.has(file))uploadIds.current.set(file,'photo_'+crypto.randomUUID());
  const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('อ่านไฟล์ไม่สำเร็จ'));reader.readAsDataURL(file);});
  await DB.request({action:'uploadPhoto',id:uploadIds.current.get(file),districtId,reportDate,mimeType:file.type,base64,caption});
@@ -420,8 +444,8 @@ function App() {
                 if (!current) { setImage(null); return; }
                 let active = true;
                 setImage(null);
-                DB.request({action:'getPhoto', id:current.id}).then(data => {
-                    if (active) setImage({id:current.id, src:'data:'+data.mimeType+';base64,'+data.base64});
+                loadPhotoUrl('getPhoto',current.id).then(src => {
+                    if (active) setImage({id:current.id, src});
                 }).catch(e => { if (active) setMessage('เปิดภาพไม่สำเร็จ: ' + e.message); });
                 return () => { active = false; };
             }, [current?.id]);
@@ -502,8 +526,8 @@ function App() {
                 let active = true;
                 setImage(null);
                 const action = current.source === 'pheoc' ? 'getPheocFile' : 'getPhoto';
-                DB.request({action, id:current.id}).then(data => {
-                    if (active) setImage({id:current.id, src:'data:'+data.mimeType+';base64,'+data.base64});
+                loadPhotoUrl(action,current.id).then(src => {
+                    if (active) setImage({id:current.id, src});
                 }).catch(error => { if (active) setMessage('เปิดภาพแนบไม่สำเร็จ: '+error.message); });
                 return () => { active = false; };
             }, [current?.id]);
@@ -1115,8 +1139,8 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
                 if (selected.length > 5) { setMessage('เลือกได้ครั้งละไม่เกิน 5 ไฟล์'); return; }
                 setBusy(true);
                 try {
-                    for (const file of selected) {
-                        if (!file.size || file.size > 2 * 1024 * 1024) throw new Error('ไฟล์ต้องมีขนาดไม่เกิน 2 MB ต่อไฟล์');
+                    for (const original of selected) { const file = original.type.startsWith('image/') ? await optimizePhoto(original) : original;
+                        if (!file.size || original.size > 12 * 1024 * 1024 || file.size > 2 * 1024 * 1024) throw new Error('ไฟล์ต้นฉบับไม่เกิน 12 MB และหลังปรับขนาดไม่เกิน 2 MB ต่อไฟล์');
                         if (!file.name || file.name.length > 180 || !['application/pdf','text/csv','text/plain','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','image/jpeg','image/png'].includes(file.type)) throw new Error('รองรับ PDF, Word, Excel, CSV, TXT, JPG และ PNG');
                         if (!uploadIds.current.has(file)) uploadIds.current.set(file, 'pheoc_' + crypto.randomUUID());
                         const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ')); reader.readAsDataURL(file); });
