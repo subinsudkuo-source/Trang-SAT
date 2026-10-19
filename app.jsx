@@ -150,7 +150,7 @@ function App() {
                                 </div>
                                 <div>
                                     <h1 className="text-lg md:text-xl font-bold tracking-wide">TRANG SAT — ระบบเฝ้าระวังอุทกภัยและรายงานสถานการณ์จังหวัดตรัง</h1>
-                                    <p className="text-xs text-slate-300">สำนักงานสาธารณสุขจังหวัดตรัง | geoBoundaries ADM2 & TMD Integrated</p>
+                                    <p className="text-xs text-slate-300">สำนักงานสาธารณสุขจังหวัดตรัง</p>
                                 </div>
                             </div>
 
