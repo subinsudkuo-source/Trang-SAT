@@ -1099,7 +1099,7 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
                 try {
                     for (const original of selected) { const file = original.type.startsWith('image/') ? await optimizePhoto(original) : original;
                         if (!file.size || original.size > 12 * 1024 * 1024 || file.size > 2 * 1024 * 1024) throw new Error('ไฟล์ต้นฉบับไม่เกิน 12 MB และหลังปรับขนาดไม่เกิน 2 MB ต่อไฟล์');
-                        if (!file.name || file.name.length > 180 || !['application/pdf','text/csv','text/plain','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword','image/jpeg','image/png'].includes(file.type)) throw new Error('รองรับ PDF, Word, Excel, CSV, TXT, JPG และ PNG');
+                        if (!file.name || file.name.length > 180 || !['application/pdf','image/jpeg','image/png'].includes(file.type)) throw new Error('รองรับเฉพาะ PDF, JPG และ PNG');
                         if (!uploadIds.current.has(file)) uploadIds.current.set(file, 'pheoc_' + crypto.randomUUID());
                         const base64 = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = () => reject(new Error('อ่านไฟล์ไม่สำเร็จ')); reader.readAsDataURL(file); });
                         await DB.request({ action: 'uploadPheocFile', id: uploadIds.current.get(file), group, reportDate, fileName: file.name, mimeType: file.type, base64 });
@@ -1119,9 +1119,9 @@ function DistrictReportView({districts,reports,setReports,showToast}) {
                 } catch (e) { setMessage('ดาวน์โหลดไม่สำเร็จ: ' + e.message); } finally { setBusy(false); }
             };
             return <section className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-                <p className="text-sm">ส่งได้สูงสุด 5 ไฟล์ต่อครั้ง รองรับ PDF, Word, Excel, CSV, TXT, JPG, PNG ขนาดไม่เกิน 2 MB ต่อไฟล์</p>
+                <p className="text-sm">ส่งได้สูงสุด 5 ไฟล์ต่อครั้ง รองรับเฉพาะ PDF, JPG และ PNG ขนาดไม่เกิน 2 MB ต่อไฟล์</p>
                 <p className="text-xs text-amber-800">ระบบเปิดโดยไม่ต้องล็อกอิน ผู้เข้าถึงเว็บอาจดาวน์โหลดไฟล์ที่ส่งได้ กรุณาอย่าแนบข้อมูลผู้ป่วยหรือเอกสารลับ</p>
-                <input ref={fileInput} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png" disabled={busy} aria-label={'เลือกไฟล์รายงาน ' + group} className="block w-full" />
+                <input ref={fileInput} type="file" multiple accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" disabled={busy} aria-label={'เลือกไฟล์รายงาน ' + group} className="block w-full" />
                 <button type="button" disabled={busy} onClick={upload} className="bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50">{busy ? 'กำลังดำเนินการ…' : 'ส่งไฟล์รายวันเข้า Drive'}</button>
                 <p role="status" className="text-sm">{message}</p>
                 {files.length > 0 && <ul className="space-y-2">{files.map(file => <li key={file.id} className="bg-white rounded border p-2 flex items-center justify-between gap-3 text-sm"><span className="break-all">{file.fileName} <small className="text-slate-500">({(Number(file.sizeBytes) / 1024).toFixed(0)} KB)</small></span><button type="button" disabled={busy} onClick={() => download(file)} className="text-blue-700 underline shrink-0">ดาวน์โหลด</button></li>)}</ul>}
