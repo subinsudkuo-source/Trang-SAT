@@ -45,8 +45,8 @@
         };
 
         
-const DB = {
- async request(input) {
+const DB_READS_IN_FLIGHT = new Map(); async function sharedDBRead(input){const key=JSON.stringify(input);if(DB_READS_IN_FLIGHT.has(key))return DB_READS_IN_FLIGHT.get(key);const request=(async()=>{const headers={'Content-Type':'application/json'};const response=await fetch('/api/db',{method:'POST',credentials:'same-origin',headers,body:JSON.stringify(input)});const result=await response.json();if(!result.ok){const error=new Error(result.error||'บันทึกไม่สำเร็จ');error.status=response.status;throw error;}const data=result.data;if(Array.isArray(data))return data.map(unpackFloodReport);if(data&&Array.isArray(data.reports))return {...data,reports:data.reports.map(unpackFloodReport)};return unpackFloodReport(data);})();DB_READS_IN_FLIGHT.set(key,request);request.then(()=>DB_READS_IN_FLIGHT.delete(key),()=>DB_READS_IN_FLIGHT.delete(key));return request;} const DB = {
+ async request(input) { if (['list','bootstrap'].includes(input?.action)) return sharedDBRead(input);
    const headers={'Content-Type':'application/json'};
    const response = await fetch('/api/db', {method:'POST', credentials:'same-origin', headers,body:JSON.stringify(input)});
    const result = await response.json();
