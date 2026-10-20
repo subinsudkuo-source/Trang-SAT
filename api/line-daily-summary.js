@@ -69,7 +69,7 @@ function makeSummary(data, reportDate) {
     `เสี่ยงสูง/วิกฤต: ${risk.length ? risk.join(', ') : 'ไม่พบในรายงานที่ส่ง'}`,
     `เฝ้าระวัง: ${watch.length ? watch.join(', ') : 'ไม่พบในรายงานที่ส่ง'}`,
     `ได้รับผลกระทบ: ${totals.affectedReported ? `${formatCount(totals.affected)} คน` : 'ยังไม่มีข้อมูล'} | เสียชีวิต: ${totals.deathsReported ? `${formatCount(totals.deaths)} ราย` : 'ยังไม่มีข้อมูล'} | บาดเจ็บ: ${totals.injuriesReported ? `${formatCount(totals.injuries)} ราย` : 'ยังไม่มีข้อมูล'}`,
-    `รายงาน PHEOC ${pheoc.length} กลุ่ม: ${pheoc.length ? pheoc.map(item => `${item.group || 'ไม่ระบุกลุ่ม'} (ความพร้อม ${item.readiness || 'ไม่ระบุ'}): ${item.actions || 'ไม่มีรายละเอียดการดำเนินงาน'}`).join(' • ') : 'ยังไม่มีรายงาน'}`,
+    `รายงาน PHEOC ${pheoc.length} กลุ่ม: ${pheoc.length ? pheoc.map(item => `${item.group || 'ไม่ระบุกลุ่ม'} (ความพร้อม ${item.readiness || 'ไม่ระบุ'}, บุคลากรพร้อมปฏิบัติงาน ${item.personnelCount ?? 'ไม่ระบุ'} คน${item.nextPlan ? `, แผนถัดไป ${item.nextPlan}` : ''})`).join(' • ') : 'ยังไม่มีรายงาน'}`,
     pending.length ? `อำเภอที่ยังไม่ส่ง: ${pending.join(', ')}` : 'ส่งรายงานครบทุกอำเภอ'
   ].join('\n');
 
@@ -86,7 +86,7 @@ function makeSummary(data, reportDate) {
         injuries: counts.injuries.reported ? counts.injuries.total : null
       };
     }),
-    pheoc: pheoc.map(row => ({ group: row.group || '', readiness: row.readiness || '', actions: row.actions || '', issues: row.issues || '', nextPlan: row.nextPlan || '' })),
+    pheoc: pheoc.map(row => ({ group: row.group || '', readiness: row.readiness || '', personnelCount: row.personnelCount ?? '', nextPlan: row.nextPlan || '' })),
     missingDistricts: pending
   };
   return { deterministic, aiInput };
