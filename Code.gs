@@ -8,7 +8,7 @@ const TABLES = {
   PHEOCFiles: ['id','reportDate','group','fileId','fileName','mimeType','sizeBytes','driveUrl','uploadedAt'],
   Districts: ['id','english','thai','longitude','latitude'],
   DailyReports: ['id','reportDate','districtId','districtName','status','submitted','rain','waterLevel','trend','reporter','notes','updatedAt'],
-  PHEOCReports: ['id','reportDate','group','readiness','personnel','actions','issues','nextPlan','updatedAt'],
+  PHEOCReports: ['id','reportDate','group','readiness','personnelCount','nextPlan','updatedAt'],
   Incidents: ['id','reportDate','districtId','type','severity','description','status','updatedAt'],
   SupportRequests: ['id','reportDate','districtId','item','quantity','unit','reason','status','updatedAt']
 };
@@ -35,6 +35,7 @@ function setupSystem() {
         sh.getRange(1,1,1,TABLES[name].length).setBackground('#102D50').setFontColor('#ffffff').setFontWeight('bold');
         sh.setFrozenRows(1);
       }
+      if (name === 'PHEOCReports') migratePheocSheet_(ss,sh);
       checkHeaders_(sh,name);
     });
     const districts = ss.getSheetByName('Districts');
@@ -83,6 +84,10 @@ function upsert_(name,record) {
   const allowed = TABLES[name];
   Object.keys(record).forEach(k=>{if(!allowed.includes(k))throw new Error('UNKNOWN_FIELD:'+k);});
   if(allowed.includes('districtId') && !DISTRICT_SEEDS.some(d=>d[0]===record.districtId)) throw new Error('INVALID_DISTRICT');
+  if(name==='PHEOCReports') {
+    if(record.readiness!==''&&!['พร้อมปฏิบัติการ','พร้อมบางส่วน','ไม่พร้อม','กำลังประเมิน'].includes(record.readiness))throw new Error('INVALID_READINESS');
+    if(record.personnelCount!==''&&record.personnelCount!==undefined&&(typeof record.personnelCount!=='number'||!Number.isInteger(record.personnelCount)||record.personnelCount<0))throw new Error('INVALID_PERSONNEL_COUNT');
+  }
   let id = record.id;
   if(name==='DailyReports') id=date+'_'+record.districtId;
   if(!id)id=Utilities.getUuid();
@@ -114,6 +119,34 @@ function sheet_(name) {
 }
 function checkHeaders_(sh,name) {
  if(JSON.stringify(sh.getRange(1,1,1,TABLES[name].length).getDisplayValues()[0])!==JSON.stringify(TABLES[name]))throw new Error('HEADER_MISMATCH:'+name);
+}
+function migratePheocSheet_(ss,sh) {
+ const current=TABLES.PHEOCReports;
+ const legacy=['id','reportDate','group','readiness','personnel','actions','issues','nextPlan','updatedAt'];
+ const headers=sh.getRange(1,1,1,legacy.length+1).getDisplayValues()[0];
+ if(JSON.stringify(headers.slice(0,current.length))===JSON.stringify(current))return;
+ if(JSON.stringify(headers.slice(0,legacy.length))!==JSON.stringify(legacy)||!['','personnelCount'].includes(headers[legacy.length]))return;
+ const lastRow=sh.getLastRow();
+ const oldRows=lastRow>1?sh.getRange(2,1,lastRow-1,headers[legacy.length]?legacy.length+1:legacy.length).getValues():[];
+ if(oldRows.some(row=>row[0])) {
+  const suffix=Utilities.formatDate(new Date(),'Asia/Bangkok','yyyyMMdd_HHmmss');
+  let archiveName='PHEOCReports_Legacy_'+suffix,serial=1;
+  while(ss.getSheetByName(archiveName))archiveName='PHEOCReports_Legacy_'+suffix+'_'+serial++;
+  sh.copyTo(ss).setName(archiveName);
+ }
+ const hasCount=headers[legacy.length]==='personnelCount';
+ const rows=oldRows.filter(row=>row[0]).map(row=>[
+  row[0],row[1],row[2],row[3],toPersonnelCount_(hasCount?row[legacy.length]:row[4]),row[7],row[8]
+ ]);
+ sh.clearContents();
+ sh.getRange(1,1,1,current.length).setValues([current]).setBackground('#102D50').setFontColor('#ffffff').setFontWeight('bold');
+ if(rows.length)sh.getRange(2,1,rows.length,current.length).setValues(rows);
+ sh.setFrozenRows(1);
+}
+function toPersonnelCount_(value) {
+ if(typeof value==='number'&&Number.isInteger(value)&&value>=0)return value;
+ const match=String(value==null?'':value).match(/^\s*(\d+)\s*(?:คน|นาย|ราย)?\s*$/);
+ return match?Number(match[1]):'';
 }
 function readRows_(name) {
  const sh=sheet_(name);checkHeaders_(sh,name);
