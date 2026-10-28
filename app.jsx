@@ -242,7 +242,7 @@ function App() {
                     <main className="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
                         {activeTab === 'summary' && <ProvincialSummaryView districts={DISTRICTS} districtReports={districtReports} pheocReports={pheocReports} showToast={showToast} setActiveTab={setActiveTab} />}
                         {activeTab === 'map' && <GoogleAndGeoMap districts={DISTRICTS} districtReports={districtReports} showToast={showToast} />}
-                        {activeTab === 'dashboard' && <DashboardView districts={DISTRICTS} reports={districtReports} />}
+                        {activeTab === 'dashboard' && <DashboardView districts={DISTRICTS} />}
                         {activeTab === 'district' && <DistrictReportView districts={DISTRICTS} reports={districtReports} setReports={setDistrictReports} showToast={showToast} />}
                         {activeTab === 'pheoc' && <PheocView reports={pheocReports} setReports={setPheocReports} showToast={showToast} />}
                         {activeTab === 'incident' && <IncidentView showToast={showToast} />}
@@ -888,76 +888,88 @@ function App() {
             );
         }
 
-        function DashboardView({ districts, reports }) {
-            const highRiskCount = reports.filter(r => r.status === 'เสี่ยงสูง').length;
-            const warningCount = reports.filter(r => r.status === 'เฝ้าระวัง').length;
-            const submittedCount = reports.filter(r => r.submitted).length;
-
-            return (
-                <div className="space-y-6">
-                    <div className="bg-gradient-to-r from-navy via-slate-800 to-bluePrimary text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div>
-                            <span className="bg-blue-500/30 text-cyan-300 text-xs px-3 py-1 rounded-full font-semibold border border-blue-400/30">
-                                ศูนย์ปฏิบัติการฉุกเฉินด้านการแพทย์และสาธารณสุข (PHEOC) จ.ตรัง
-                            </span>
-                            <h2 className="text-2xl md:text-3xl font-bold mt-2">Dashboard ภาพรวมอุทกภัยจังหวัดตรัง</h2>
-                            <p className="text-slate-300 text-xs md:text-sm mt-1">ติดตามสถานการณ์น้ำท่วมและความพร้อมของ 10 อำเภอแบบเรียลไทม์</p>
-                        </div>
-                        <div className="text-right hidden sm:block">
-                            <p className="text-xs text-slate-300">อัปเดตข้อมูลล่าสุด</p>
-                            <p className="text-sm font-bold text-cyan-300">{getCurrentBKKTime()}</p>
-                        </div>
+        function DashboardBars({items, color, unit}) {
+            const maximum=Math.max(1,...items.map(item=>item.value||0));
+            return <div className="space-y-3" role="list" aria-label={`ข้อมูลรายอำเภอ หน่วย ${unit}`}>
+                {items.map(item=><div key={item.name} role="listitem" className="grid grid-cols-[80px_1fr_72px] sm:grid-cols-[100px_1fr_80px] items-center gap-3 text-xs">
+                    <span className="text-slate-600 truncate" title={item.name}>{item.name}</span>
+                    <div className="h-5 rounded-md bg-slate-100 overflow-hidden relative">
+                        {item.value!==null&&<div className="h-full rounded-md transition-all duration-500" style={{width:`${item.value/maximum*100}%`,background:color,minWidth:item.value>0?3:0}}/>}
+                        {item.value===null&&<span className="absolute inset-0 text-center text-[10px] leading-5 text-slate-400">{item.note||'ไม่ระบุตัวเลข'}</span>}
                     </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="glass-card p-5 border-l-4 border-l-emerald-500 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-slate-500 font-medium">อำเภอส่งรายงานแล้ว</p>
-                                <h3 className="text-2xl font-bold text-slate-800 mt-1">{submittedCount} <span className="text-xs font-normal text-slate-400">/ 10</span></h3>
-                                <p className="text-[11px] text-emerald-600 font-medium mt-1">✓ ครบตามรอบกำหนด</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl">
-                                <i className="ph ph-check-square-offset"></i>
-                            </div>
-                        </div>
-
-                        <div className="glass-card p-5 border-l-4 border-l-red-500 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-slate-500 font-medium">พื้นที่เสี่ยงสูง / วิกฤต</p>
-                                <h3 className="text-2xl font-bold text-red-600 mt-1">{highRiskCount} <span className="text-xs font-normal text-slate-400">อำเภอ</span></h3>
-                                <p className="text-[11px] text-red-500 font-medium mt-1">⚠️ อำเภอนาโยง</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-2xl">
-                                <i className="ph ph-warning-circle"></i>
-                            </div>
-                        </div>
-
-                        <div className="glass-card p-5 border-l-4 border-l-amber-500 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-slate-500 font-medium">พื้นที่เฝ้าระวัง</p>
-                                <h3 className="text-2xl font-bold text-amber-600 mt-1">{warningCount} <span className="text-xs font-normal text-slate-400">อำเภอ</span></h3>
-                                <p className="text-[11px] text-amber-500 font-medium mt-1">⚡ เมืองตรัง, ห้วยยอด</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl">
-                                <i className="ph ph-cloud-rain"></i>
-                            </div>
-                        </div>
-
-                        <div className="glass-card p-5 border-l-4 border-l-bluePrimary flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-slate-500 font-medium">หน่วยบริการเสี่ยง</p>
-                                <h3 className="text-2xl font-bold text-blue-600 mt-1">2 <span className="text-xs font-normal text-slate-400">แห่ง</span></h3>
-                                <p className="text-[11px] text-blue-500 font-medium mt-1">🛡️ เตรียมกระสอบทรายแล้ว</p>
-                            </div>
-                            <div className="w-12 h-12 rounded-xl bg-blue-50 text-bluePrimary flex items-center justify-center text-2xl">
-                                <i className="ph ph-hospital"></i>
-                            </div>
-                        </div>
+                    <span className="text-right tabular-nums font-semibold text-slate-700">{item.value===null?'—':item.value.toLocaleString('th-TH',{maximumFractionDigits:1})}</span>
+                </div>)}
+                <p className="text-[11px] text-slate-400 text-right">หน่วย: {unit} • เทียบขนาดจากค่าสูงสุดในกราฟ</p>
+            </div>;
+        }
+        function DashboardTrend({points, color, unit}) {
+            const max=Math.max(1,...points.map(point=>point.value||0));
+            const x=index=>55+index*90, y=value=>165-value/max*120;
+            return <div>
+                <svg viewBox="0 0 640 220" className="w-full" role="img" aria-label={`แนวโน้ม 7 วัน หน่วย ${unit} มีข้อมูล ${points.filter(p=>p.value!==null).length} วัน`}>
+                    {[0,0.5,1].map(fraction=><g key={fraction}><line x1="55" x2="595" y1={y(max*fraction)} y2={y(max*fraction)} stroke="#e2e8f0" strokeDasharray="4 4"/><text x="44" y={y(max*fraction)+4} textAnchor="end" fontSize="10" fill="#64748b">{(max*fraction).toLocaleString('th-TH',{maximumFractionDigits:1})}</text></g>)}
+                    {points.map((point,index)=><g key={point.date}>
+                        {index>0&&point.value!==null&&points[index-1].value!==null&&<line x1={x(index-1)} y1={y(points[index-1].value)} x2={x(index)} y2={y(point.value)} stroke={color} strokeWidth="3"/>}
+                        {point.value!==null?<g><title>{point.date}: {point.value} {unit} • มีตัวเลข {point.sources} อำเภอ</title><circle cx={x(index)} cy={y(point.value)} r="5" fill={color} stroke="white" strokeWidth="2"/><text x={x(index)} y={y(point.value)-12} textAnchor="middle" fontSize="11" fill={color}>{point.value.toLocaleString('th-TH')}</text></g>:<text x={x(index)} y="150" textAnchor="middle" fontSize="10" fill="#94a3b8">ไม่มีข้อมูล</text>}
+                        <text x={x(index)} y="190" textAnchor="middle" fontSize="11" fill="#475569">{new Date(point.date+'T12:00:00Z').toLocaleDateString('th-TH',{day:'numeric',month:'short'})}</text>
+                        <text x={x(index)} y="208" textAnchor="middle" fontSize="10" fill="#94a3b8">{point.sources} อำเภอ</text>
+                    </g>)}
+                </svg>
+                <details className="text-xs text-slate-500"><summary className="cursor-pointer">ดูข้อมูลแนวโน้มแบบตาราง</summary><div className="overflow-x-auto mt-3"><table className="w-full text-left"><thead><tr><th className="p-2">วันที่</th><th>ยอด ({unit})</th><th>อำเภอที่มีตัวเลข</th></tr></thead><tbody>{points.map(point=><tr key={point.date} className="border-t"><td className="p-2">{point.date}</td><td>{point.value===null?'ไม่มีข้อมูล':point.value.toLocaleString('th-TH')}</td><td>{point.sources}</td></tr>)}</tbody></table></div></details>
+            </div>;
+        }
+        function DashboardView({ districts }) {
+            const today=new Date(Date.now()+7*60*60*1000).toISOString().slice(0,10);
+            const [date,setDate]=useState(today),[records,setRecords]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[loadedAt,setLoadedAt]=useState(''),[refresh,setRefresh]=useState(0),[metricKey,setMetricKey]=useState('affected');
+            useEffect(()=>{
+                let active=true;setLoading(true);setError('');
+                DB.request({action:'list',table:'DailyReports'}).then(rows=>{
+                    if(!Array.isArray(rows))throw new Error('รูปแบบข้อมูลรายงานไม่ถูกต้อง');
+                    if(active){setRecords(rows);setLoadedAt(getCurrentBKKTime());}
+                }).catch(e=>{if(active)setError(e.message||'ไม่สามารถเชื่อมต่อฐานข้อมูล');}).finally(()=>{if(active)setLoading(false);});
+                return ()=>{active=false;};
+            },[refresh]);
+            const D=DashboardData, daily=D.daily(records,districts,date), submitted=daily.filter(row=>row.submitted), drafts=daily.filter(row=>row.report&&!row.submitted), absent=daily.filter(row=>!row.report);
+            const metric=D.metrics.find(item=>item.key===metricKey)||D.metrics[0], impact=D.total(daily,metric.key), affected=D.total(daily,'affected'), households=D.total(daily,'households');
+            const riskGroups=[{name:'เสี่ยงสูง / วิกฤต',color:'#ef4444'},{name:'เฝ้าระวัง',color:'#f59e0b'},{name:'ปกติ',color:'#10b981'},{name:'ไม่ระบุสถานะ',color:'#8b5cf6'},{name:'ยังไม่ส่ง',color:'#cbd5e1'}].map(group=>({...group,count:daily.filter(row=>row.risk===group.name).length}));
+            const highRisk=riskGroups[0].count, percent=districts.length?Math.round(submitted.length/districts.length*100):0;
+            const points=D.history(records,districts,date,metric.key);
+            const impactItems=daily.map(row=>({name:row.district.thai,value:row.submitted?D.metric(row.report,metric.key):null,note:row.submitted?'ไม่ระบุตัวเลข':row.report?'ยังไม่ส่งรายงาน':'ไม่มีรายงาน'})).sort((a,b)=>(b.value??-1)-(a.value??-1));
+            const rainItems=daily.map(row=>({name:row.district.thai,value:row.submitted?D.metric(row.report,'rain'):null,note:row.submitted?'ไม่ระบุตัวเลข':'ยังไม่ส่งรายงาน'})).sort((a,b)=>(b.value??-1)-(a.value??-1));
+            const rainKnown=rainItems.filter(row=>row.value!==null), rainMax=rainKnown[0];
+            const fmt=value=>value===null?'—':value.toLocaleString('th-TH');
+            const dateLabel=new Date(date+'T12:00:00Z').toLocaleDateString('th-TH',{dateStyle:'long'});
+            let offset=0;
+            return <div className="space-y-6" aria-busy={loading}>
+                <header className="bg-gradient-to-r from-navy via-[#15476b] to-bluePrimary text-white p-6 md:p-8 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-5">
+                    <div><p className="text-cyan-200 text-xs tracking-wide">TRANG FLOOD MONITORING • PHEOC จังหวัดตรัง</p><h2 className="text-2xl md:text-3xl font-bold mt-2">Dashboard ภาพรวมอุทกภัยจังหวัดตรัง</h2><p className="text-blue-100 text-sm mt-2">เชื่อมโยงข้อมูลรายงานอำเภอจาก Google Sheets • {districts.length} อำเภอ</p></div>
+                    <div className="rounded-xl border border-white/20 bg-white/10 p-4 text-xs shrink-0"><p className="text-blue-100">ข้อมูลประจำวันที่</p><p className="text-lg font-semibold mt-1">{dateLabel}</p><p className="text-cyan-200 mt-1">{loadedAt?'ดึงข้อมูลล่าสุด '+loadedAt:'กำลังเชื่อมต่อฐานข้อมูล…'}</p></div>
+                </header>
+                <div className="glass-card p-4 flex flex-wrap items-center justify-between gap-3"><label className="text-sm font-medium flex flex-wrap items-center gap-3">เลือกวันที่รายงาน<input aria-label="วันที่รายงาน Dashboard" type="date" max={today} value={date} onChange={e=>{if(/^\d{4}-\d{2}-\d{2}$/.test(e.target.value))setDate(e.target.value);}} className="border rounded-lg px-3 py-2 bg-slate-50 text-slate-700"/></label><button type="button" disabled={loading} onClick={()=>setRefresh(n=>n+1)} className="rounded-lg bg-blue-50 text-blue-700 px-4 py-2 text-sm font-medium disabled:opacity-50"><i className="ph ph-arrow-clockwise mr-2" aria-hidden="true"/>{loading?'กำลังโหลด…':'อัปเดตข้อมูล'}</button></div>
+                {error?<div role="alert" className="bg-red-50 text-red-800 border border-red-200 rounded-xl p-5">โหลดข้อมูล Dashboard ไม่สำเร็จ: {error} <button onClick={()=>setRefresh(n=>n+1)} className="underline font-semibold ml-2">ลองใหม่</button><p className="text-xs mt-2">กราฟถูกซ่อนไว้จนกว่าจะเชื่อมต่อฐานข้อมูลสำเร็จ</p></div>:loading?<div role="status" className="glass-card p-12 text-center text-slate-500">กำลังอ่านรายงานจากฐานข้อมูล เพื่อสรุปกราฟสถานการณ์…</div>:<>
+                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                        {[
+                            {label:'อำเภอส่งรายงานแล้ว',value:`${submitted.length} / ${districts.length}`,note:`${percent}% • ร่าง ${drafts.length} • ไม่มีรายงาน ${absent.length}`,color:'#10b981',icon:'ph-check-square-offset'},
+                            {label:'พื้นที่เสี่ยงสูง / วิกฤต',value:highRisk+' อำเภอ',note:daily.filter(row=>row.risk===riskGroups[0].name).map(row=>row.district.thai).join(' • ')||'จากรายงานที่ส่งแล้ว',color:'#ef4444',icon:'ph-warning-circle'},
+                            {label:'ประชาชนได้รับผลกระทบ',value:fmt(affected.value)+' คน',note:`มีตัวเลข ${affected.sources} / ${districts.length} อำเภอ`,color:'#258dce',icon:'ph-users-three'},
+                            {label:'ครัวเรือนได้รับผลกระทบ',value:fmt(households.value)+' หลัง',note:`มีตัวเลข ${households.sources} / ${districts.length} อำเภอ`,color:'#7c3aed',icon:'ph-house'}
+                        ].map(card=><article key={card.label} className="glass-card p-4 sm:p-5 border-t-4" style={{borderTopColor:card.color}}><div className="flex justify-between gap-2"><p className="text-xs text-slate-500">{card.label}</p><i aria-hidden="true" className={`ph ${card.icon} text-xl`} style={{color:card.color}}/></div><p className="text-xl sm:text-2xl font-bold mt-3 tabular-nums" style={{color:card.color}}>{card.value}</p><p className="text-[11px] text-slate-500 mt-2">{card.note}</p></article>)}
                     </div>
-
-                    
-                </div>
-            );
+                    <aside className={`rounded-xl border p-4 text-sm flex items-start gap-3 ${submitted.length<districts.length?'bg-amber-50 border-amber-200 text-amber-900':'bg-emerald-50 border-emerald-200 text-emerald-900'}`}><i aria-hidden="true" className="ph ph-info text-xl"/><div><p className="font-semibold">{submitted.length===0?'ยังไม่มีรายงานที่ส่งแล้วสำหรับวันที่เลือก':`ภาพรวมจากรายงานที่ส่งแล้ว ${submitted.length} อำเภอ${percent<100?' • ข้อมูลยังไม่ครบทั้งจังหวัด':''}`}</p><p className="text-xs mt-1">{daily.filter(row=>!row.submitted).length?'รอติดตาม: '+daily.filter(row=>!row.submitted).map(row=>row.district.thai).join(' • '):'ได้รับรายงานครบทุกอำเภอ'} • ไม่รวมรายงานร่างในยอดสถานการณ์</p></div></aside>
+                    <div className="grid lg:grid-cols-2 gap-6">
+                        <section className="glass-card p-5 sm:p-6"><div className="flex justify-between items-start gap-3"><div><h3 className="font-bold text-lg">ระดับความเสี่ยงรายอำเภอ</h3><p className="text-xs text-slate-500 mt-1">สัดส่วนพื้นที่จากรายงานวันที่เลือก</p></div><span className="text-xs bg-slate-100 rounded-full px-3 py-1">{districts.length} อำเภอ</span></div><div className="flex flex-col sm:flex-row items-center gap-6 mt-5">
+                            <svg viewBox="0 0 200 200" className="w-48 h-48 shrink-0" role="img" aria-label={riskGroups.map(g=>`${g.name} ${g.count} อำเภอ`).join(', ')}><circle cx="100" cy="100" r="76" fill="none" stroke="#f1f5f9" strokeWidth="22"/>{riskGroups.filter(g=>g.count).map(group=>{const length=group.count/Math.max(1,districts.length)*100,start=offset;offset+=length;return <circle key={group.name} cx="100" cy="100" r="76" fill="none" stroke={group.color} strokeWidth="22" pathLength="100" strokeDasharray={`${length} ${100-length}`} strokeDashoffset={-start} transform="rotate(-90 100 100)"><title>{group.name}: {group.count} อำเภอ</title></circle>;})}<text x="100" y="97" textAnchor="middle" fontSize="34" fontWeight="600" fill="#102d50">{submitted.length}</text><text x="100" y="121" textAnchor="middle" fontSize="12" fill="#64748b">อำเภอส่งรายงานแล้ว</text></svg>
+                            <div className="w-full space-y-3">{riskGroups.map(group=><div key={group.name} className="flex items-center justify-between gap-3 text-sm"><span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{background:group.color}}/>{group.name}</span><b className="tabular-nums">{group.count} <span className="font-normal text-xs text-slate-400">อำเภอ</span></b></div>)}</div></div>
+                        </section>
+                        <section className="glass-card p-5 sm:p-6"><div className="flex justify-between items-start gap-3 mb-5"><div><h3 className="font-bold text-lg">ปริมาณฝนรายอำเภอ</h3><p className="text-xs text-slate-500 mt-1">เรียงจากมากไปน้อย • ตามค่าฝนที่อำเภอบันทึก</p></div><span className="text-xs text-blue-700 bg-blue-50 px-3 py-1 rounded-full">มม.</span></div><DashboardBars items={rainItems} color="#258dce" unit="มม."/><p className="text-xs text-slate-500 mt-4">{rainMax?`ค่าสูงสุด: ${rainMax.name} ${rainMax.value.toLocaleString('th-TH')} มม. • มีตัวเลข ${rainKnown.length} อำเภอ`:'ยังไม่มีรายงานที่ส่งแล้วพร้อมตัวเลขปริมาณฝน'}</p></section>
+                    </div>
+                    <section className="glass-card p-5 sm:p-6"><div className="flex flex-col sm:flex-row justify-between gap-3"><div><h3 className="font-bold text-lg">ผลกระทบและการช่วยเหลือประชาชน</h3><p className="text-xs text-slate-500 mt-1">เลือกตัวชี้วัดเพื่อเปรียบเทียบอำเภอและติดตามย้อนหลัง</p></div><div className="text-right"><p className="text-2xl font-bold" style={{color:metric.color}}>{fmt(impact.value)} <span className="text-sm">{metric.unit}</span></p><p className="text-[11px] text-slate-400">ยอดรวมที่มีข้อมูล • {impact.sources} อำเภอ</p></div></div>
+                        <div className="flex flex-wrap gap-2 my-5" aria-label="เลือกตัวชี้วัดกราฟ">{D.metrics.map(item=><button key={item.key} type="button" aria-pressed={item.key===metricKey} onClick={()=>setMetricKey(item.key)} className="border rounded-full px-3 py-2 text-xs transition" style={{background:item.key===metricKey?item.color:'white',color:item.key===metricKey?'white':'#475569',borderColor:item.key===metricKey?item.color:'#e2e8f0'}}>{item.label}</button>)}</div>
+                        <div className="grid lg:grid-cols-2 gap-8"><div><h4 className="text-sm font-semibold mb-4">เปรียบเทียบรายอำเภอ</h4><DashboardBars items={impactItems} color={metric.color} unit={metric.unit}/></div><div className="min-w-0"><h4 className="text-sm font-semibold">แนวโน้ม 7 วัน • {metric.label}</h4><p className="text-[11px] text-slate-500 mt-1">ยอดรายวันตามรายงาน • ไม่บวกสะสมข้ามวัน</p><DashboardTrend points={points} color={metric.color} unit={metric.unit}/><p className="text-[11px] text-slate-500 mt-3">จำนวนอำเภอที่มีตัวเลขอาจต่างกันในแต่ละวัน • เว้นช่วงวันที่ไม่มีข้อมูล จึงควรพิจารณาความครบถ้วนร่วมกับแนวโน้ม</p></div></div>
+                        <p className="text-[11px] text-slate-500 mt-5 pt-4 border-t">แหล่งข้อมูล: DailyReports ในฐานข้อมูล Google Sheets • ใช้เฉพาะรายงานที่ส่งแล้วของวันนั้น • — คือยังไม่มีตัวเลข ส่วน 0 คือบันทึกยืนยันว่าไม่มี • ค่ารวมอาจยังไม่ครอบคลุมทุกอำเภอ</p>
+                    </section>
+                </>}
+            </div>;
         }
 
 const FLOOD_REPORT_PREFIX = 'TRANG_SAT_FLOOD_V1:';
